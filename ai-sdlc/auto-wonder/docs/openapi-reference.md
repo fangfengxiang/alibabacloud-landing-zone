@@ -403,9 +403,11 @@ dispatch / conversation Token 仍锁定在自身工作空间：省略 `workspace
 
 ### POST /api/agents/{agentId}/executors
 ```json
-{ "name": "string", "clientKind": "CLAUDE_CODE|CUSTOM" }
+{ "name": "string", "clientKind": "CLAUDE_CODE" }
 // Response: IssuedExecutorVO (含 token，仅创建时可见)
 ```
+
+支持的类型为 `QODER_CLI`、`QODER_CN_CLI`、`CLAUDE_CODE`。
 
 ---
 

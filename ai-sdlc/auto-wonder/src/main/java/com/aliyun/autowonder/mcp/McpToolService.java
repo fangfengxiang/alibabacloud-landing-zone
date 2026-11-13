@@ -1665,9 +1665,7 @@ public class McpToolService {
                         schema(required("id"),
                                 prop("id", "integer", "Required. Executor id."))),
                 tool(LIST_EXECUTOR_CLIENT_KINDS, "List the executor client kinds an operator may create. "
-                        + "Only the Qoder CLI family is offered, exactly like the executor page's create dialog; "
-                        + "legacy kinds such as CLAUDE_CODE still appear in autowonder.list_executors "
-                        + "but cannot be created.",
+                        + "Matches the executor page's create dialog.",
                         schema()),
                 tool(GET_EXECUTOR_LAUNCH_OPTIONS, "Get every selectable launch value the executor page offers for one "
                         + "client kind: models (from the live provider catalog, or the built-in list while no snapshot "
@@ -1675,14 +1673,13 @@ public class McpToolService {
                         + "pre-fills. Values are assembled server-side, so never hardcode them.",
                         schema(required("clientKind"),
                                 enumProp("clientKind", ExecutorLaunchOptionsService.creatableClientKindValues(),
-                                        "Required. Executor client kind; only the Qoder CLI family is supported."))),
+                                        "Required. Executor client kind. Claude Code uses its local CLI model settings."))),
                 tool(CREATE_EXECUTOR, "Create an executor for a digital worker and persist its launch config. "
                         + "Administrators also receive the one-time plaintext token; other callers get token=null and "
                         + "ask an administrator to fetch it with autowonder.get_executor_token. Validation and "
                         + "defaults match the executor page's create "
-                        + "dialog: agentId and name are required, clientKind is limited to the Qoder CLI family, and "
-                        + "memoryMode, model, reasoningEffort and contextWindow are saved on the new row in the same "
-                        + "transaction. An omitted value takes the same default that dialog pre-fills; an id you pass "
+                        + "dialog. The memory mode and any Qoder model settings are saved with the executor. "
+                        + "An omitted value uses the dialog default. A Qoder model id you pass "
                         + "explicitly that the provider catalog no longer offers is rejected rather than silently "
                         + "replaced. The response echoes exactly what was persisted, and "
                         + "autowonder.build_executor_launch_command reads those values back from the database.",
@@ -1690,7 +1687,7 @@ public class McpToolService {
                                 prop("agentId", "integer", "Required. Owning digital worker id."),
                                 prop("name", "string", "Required. Executor name, e.g. dev-machine-01."),
                                 enumProp("clientKind", ExecutorLaunchOptionsService.creatableClientKindValues(),
-                                        "Required. Executor client kind; only the Qoder CLI family can be created."),
+                                        "Required. Executor client kind. Omit model, reasoningEffort and contextWindow for Claude Code."),
                                 prop("maxConcurrentDispatches", "integer", "Optional. Integer from 1 to 10. Defaults to 5 on create; omitted updates preserve the current value. Use the new launch command to apply."),
                                 enumProp("memoryMode", ExecutorLaunchOptionsService.memoryModeValues(),
                                         "Optional. Memory mode to persist; defaults to platform, the value the page "
@@ -1729,7 +1726,7 @@ public class McpToolService {
                         + "explicitly instead of being substituted, and the response returns what the database now "
                         + "holds. Changing the config never restarts a running executor. Legacy executors created "
                         + "before client kinds were enforced have a missing kind: for those pass clientKind "
-                        + "(QODER_CLI or QODER_CN_CLI) so the kind and the config are persisted together; executors "
+                        + "so the kind and the config are persisted together; executors "
                         + "that already have a kind refuse a different one.",
                         schema(required("id", "version"),
                                 prop("id", "integer", "Required. Executor id."),
@@ -1739,7 +1736,7 @@ public class McpToolService {
                                         + "autowonder.get_executor_launch_config; a stale version is a conflict."),
                                 prop("runtimeVersion", "string", "Optional. Pin a stable release version; pass an empty string to clear the pin and follow platform automatic upgrades. Omitted preserves the current version policy."),
                                 enumProp("clientKind", ExecutorLaunchOptionsService.creatableClientKindValues(),
-                                        "Optional. QODER_CLI or QODER_CN_CLI, only for an executor whose client kind "
+                                        "Optional. Only for an executor whose client kind "
                                         + "is missing (legacy rows created before client kinds were enforced); it is "
                                         + "persisted with the config in the same write. Required for such executors "
                                         + "and refused when it differs from the kind an executor already has."),
@@ -1826,7 +1823,7 @@ public class McpToolService {
                                 prop("templateId", "string", "Optional. Draft template id."),
                                 prop("version", "string", "Optional. Expected template version."),
                                 prop("sha256", "string", "Optional. Expected template digest."),
-                                enumProp("clientKind", ExecutorLaunchOptionsService.creatableClientKindValues(), "Required. Customer-selected client."),
+                                enumProp("clientKind", com.aliyun.autowonder.harness.HarnessPreviewService.SUPPORTED_CLIENT_KINDS, "Required. Customer-selected client."),
                                 objectProp("variableValues", Map.of("type", "object", "additionalProperties", Map.of("type", "string")),
                                         "Required. All full template tokens mapped to final values."),
                                 objectProp("modelOverrides", Map.of("type", "object", "additionalProperties", true), "Optional role model overrides."),
@@ -1864,7 +1861,7 @@ public class McpToolService {
                                 prop("templateId", "string", "Optional. Template id; defaults to the draft's choice."),
                                 prop("version", "string", "Optional. Expected template version."),
                                 prop("sha256", "string", "Optional. Expected template digest."),
-                                enumProp("clientKind", ExecutorLaunchOptionsService.creatableClientKindValues(),
+                                enumProp("clientKind", com.aliyun.autowonder.harness.HarnessPreviewService.SUPPORTED_CLIENT_KINDS,
                                         "Required. QODER_CLI or QODER_CN_CLI; ask the customer, never infer it."),
                                 objectProp("variableValues", Map.of("type", "object", "additionalProperties",
                                                 Map.of("type", "string")),
@@ -4923,17 +4920,17 @@ public class McpToolService {
                         "memoryModes", "defaultModel", "defaultCreateModel", "defaultReasoningEffort",
                         "defaultContextWindow", "defaultMemoryMode"),
                 prop("clientKind", "string", "Canonical client kind these options belong to."),
-                prop("provider", "string", "Runtime provider passed as --provider, for example qoder or qodercn."),
+                prop("provider", "string", "Runtime provider passed as --provider, for example qoder or claude."),
                 arrayProp("models", selectOptionSchema(),
                         "Selectable models: the live provider catalog when a snapshot exists, "
                                 + "otherwise the built-in list the page also falls back to."),
                 arrayProp("reasoningEfforts", selectOptionSchema(), "Selectable reasoning efforts."),
                 arrayProp("contextWindows", selectOptionSchema(), "Selectable context windows."),
                 arrayProp("memoryModes", selectOptionSchema(), "Selectable memory modes."),
-                prop("defaultModel", "string", "Model pre-filled by the launch-command form."),
-                prop("defaultCreateModel", "string", "Model pre-filled by the create-executor form."),
-                prop("defaultReasoningEffort", "string", "Reasoning effort pre-filled for defaultModel."),
-                prop("defaultContextWindow", "string", "Context window pre-filled by both forms."),
+                nullableProp("defaultModel", "string", "Model pre-filled by the launch-command form."),
+                nullableProp("defaultCreateModel", "string", "Model pre-filled by the create-executor form."),
+                nullableProp("defaultReasoningEffort", "string", "Reasoning effort pre-filled for defaultModel."),
+                nullableProp("defaultContextWindow", "string", "Context window pre-filled by both forms."),
                 prop("defaultMemoryMode", "string", "Memory mode pre-filled by both forms."),
                 timestampProp("modelCatalogLastSuccessfulAt",
                         "When the live provider model catalog was last refreshed; "
@@ -4952,9 +4949,9 @@ public class McpToolService {
                 prop("clientKind", "string", "Canonical client kind."),
                 prop("memoryMode", "string", "Memory mode persisted on the new executor."),
                 prop("maxConcurrentDispatches", "integer", "Saved maximum concurrent dispatches."),
-                prop("model", "string", "Qoder model persisted on the new executor."),
-                prop("reasoningEffort", "string", "Reasoning effort persisted on the new executor."),
-                prop("contextWindow", "string", "Context window persisted on the new executor."));
+                nullableProp("model", "string", "Qoder model persisted on the new executor, if applicable."),
+                nullableProp("reasoningEffort", "string", "Qoder reasoning effort persisted on the new executor, if applicable."),
+                nullableProp("contextWindow", "string", "Qoder context window persisted on the new executor, if applicable."));
     }
 
     /**
@@ -5003,7 +5000,7 @@ public class McpToolService {
                 nullableProp("contextWindow", "string",
                         "Value passed as --context-window; null for non-Qoder executors."),
                 prop("wsUrl", "string", "Executor WebSocket URL derived from the platform MCP address."),
-                prop("runtimeVersion", "string", "autowonder runtime version pinned by npx."),
+                prop("runtimeVersion", "string", "Executor runtime version. Bundled clients use a community build identifier."),
                 nullableProp("workspaceRoot", "string", "Workspace directory passed as --workspace-root."),
                 nullableProp("daemonName", "string", "Daemon name passed as --name."),
                 prop("os", "string", "Target OS used for shell quoting: posix or windows."),

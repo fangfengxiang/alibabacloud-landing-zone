@@ -34,7 +34,7 @@ prepare及统一preview是显式允许的受限准备能力，只持久化草稿
 
 模板成员每人一个，不包含Chief，包含无SDLC角色。名称=数字人名称+“默认执行器”；显式配置contextWindow="1000000"、reasoningEffort="medium"、maxConcurrentDispatches=10、memoryMode="platform"。通过ExecutorService创建，不在初始化阶段注册/启动进程。
 
-发布清单按稳定角色码声明模型族，当前AW_AUTO_CR→GLM Flash，其余→DeepSeek-Flash。clientKind 从 `list_executor_client_kinds` 返回的当前可创建类型中选择。再通过 `get_executor_launch_options` 查询所选类型的模型目录，确定最新可用版本并冻结ID、标签、来源和时间，不按显示名/列表顺序猜测。目录仅兜底、缺模型或版本不明确时先补齐；客户明确指定版本可通过modelOverrides按角色码记录原因，仍校验可用性。不得自动用auto/GLM主系列/DeepSeek-Pro替代。
+发布清单按稳定角色码声明模型族，当前AW_AUTO_CR→GLM Flash，其余→DeepSeek-Flash。clientKind 从 `list_executor_client_kinds` 返回的类型中筛选 `QODER_CLI` 和 `QODER_CN_CLI`。再通过 `get_executor_launch_options` 查询所选类型的模型目录，确定最新可用版本并冻结ID、标签、来源和时间，不按显示名/列表顺序猜测。目录仅兜底、缺模型或版本不明确时先补齐；客户明确指定版本可通过modelOverrides按角色码记录原因，仍校验可用性。不得自动用auto/GLM主系列/DeepSeek-Pro替代。
 
 冻结模型或固定配置不可用则报告失败，不静默换型。同数字人同名同配置可复用，差异冲突，保留其他执行器；全部默认执行器成功只是统一批次成功的必要条件，不替代仓库、权限、部署绑定及发布结果。
 

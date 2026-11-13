@@ -29,6 +29,7 @@ public class ExecutorLaunchOptionsService {
 
     public static final String CLIENT_KIND_QODER_CLI = "QODER_CLI";
     public static final String CLIENT_KIND_QODER_CN_CLI = "QODER_CN_CLI";
+    public static final String CLIENT_KIND_CLAUDE_CODE = "CLAUDE_CODE";
     public static final String PROVIDER_QODER = "qoder";
     public static final String PROVIDER_QODER_CN = "qodercn";
     public static final String PROVIDER_CLAUDE = "claude";
@@ -54,7 +55,8 @@ public class ExecutorLaunchOptionsService {
     /** Client kinds an operator may create; the page hides every other kind from the create form. */
     private static final List<SelectOptionVO> CREATABLE_CLIENT_KINDS = List.of(
             new SelectOptionVO(CLIENT_KIND_QODER_CLI, "Qoder CLI", "国际版 Qoder CLI 执行器"),
-            new SelectOptionVO(CLIENT_KIND_QODER_CN_CLI, "Qoder CLI CN", "国内版 Qoder CLI 执行器"));
+            new SelectOptionVO(CLIENT_KIND_QODER_CN_CLI, "Qoder CLI CN", "国内版 Qoder CLI 执行器"),
+            new SelectOptionVO(CLIENT_KIND_CLAUDE_CODE, "Claude Code", "Claude Code 执行器"));
 
     private static final Map<String, String> PROVIDER_BY_CLIENT_KIND;
 
@@ -62,7 +64,7 @@ public class ExecutorLaunchOptionsService {
         Map<String, String> providers = new LinkedHashMap<>();
         providers.put(CLIENT_KIND_QODER_CN_CLI, PROVIDER_QODER_CN);
         providers.put(CLIENT_KIND_QODER_CLI, PROVIDER_QODER);
-        providers.put("CLAUDE_CODE", PROVIDER_CLAUDE);
+        providers.put(CLIENT_KIND_CLAUDE_CODE, PROVIDER_CLAUDE);
         providers.put("CODEX_CLI", PROVIDER_CODEX);
         providers.put("CURSOR_CLI", PROVIDER_CURSOR);
         PROVIDER_BY_CLIENT_KIND = Map.copyOf(providers);
@@ -113,8 +115,8 @@ public class ExecutorLaunchOptionsService {
 
     public static List<SelectOptionVO> creatableClientKinds() {
         return CREATABLE_CLIENT_KINDS.stream().map(option -> new SelectOptionVO(option.getValue(),
-                option.getLabel(), SystemMessages.render(CLIENT_KIND_QODER_CLI.equals(option.getValue())
-                        ? "executor.option.client.qoder_cli.description" : "executor.option.client.qoder_cn_cli.description",
+                option.getLabel(), SystemMessages.render("executor.option.client."
+                        + option.getValue().toLowerCase(Locale.ROOT) + ".description",
                 null, option.getDescription()))).toList();
     }
 
@@ -161,7 +163,7 @@ public class ExecutorLaunchOptionsService {
 
     public static boolean isCreatableClientKind(String clientKind) {
         String canonical = canonicalClientKind(clientKind);
-        return CLIENT_KIND_QODER_CLI.equals(canonical) || CLIENT_KIND_QODER_CN_CLI.equals(canonical);
+        return CREATABLE_CLIENT_KINDS.stream().anyMatch(option -> option.getValue().equals(canonical));
     }
 
     /**
@@ -170,25 +172,30 @@ public class ExecutorLaunchOptionsService {
      */
     public ExecutorLaunchOptionsVO launchOptions(long tenantId, String clientKind) {
         String canonical = requireCreatableClientKind(clientKind);
-        // requireCreatableClientKind already limits the provider to the Qoder family, so a catalog always applies.
         String provider = resolveProvider(canonical);
-        ProviderModelCatalogVO catalog = liveCatalog(tenantId, provider);
-        List<SelectOptionVO> models = catalog == null ? fallbackModels() : toOptions(catalog.getModels());
         ExecutorLaunchOptionsVO vo = new ExecutorLaunchOptionsVO();
         vo.setClientKind(canonical);
         vo.setProvider(provider);
+        vo.setMemoryModes(MEMORY_MODES.stream().map(option -> new SelectOptionVO(option.getValue(),
+                SystemMessages.render("executor.option.memory." + option.getValue().replace('-', '_') + ".label", null, option.getLabel()),
+                SystemMessages.render("executor.option.memory." + option.getValue().replace('-', '_') + ".description", null, option.getDescription()))).toList());
+        vo.setDefaultMemoryMode(DEFAULT_MEMORY_MODE);
+        if (!isQoderFamily(provider)) {
+            vo.setModels(List.of());
+            vo.setReasoningEfforts(List.of());
+            vo.setContextWindows(List.of());
+            return vo;
+        }
+        ProviderModelCatalogVO catalog = liveCatalog(tenantId, provider);
+        List<SelectOptionVO> models = catalog == null ? fallbackModels() : toOptions(catalog.getModels());
         vo.setModels(models);
         vo.setReasoningEfforts(REASONING_EFFORTS.stream().map(option -> SelectOptionVO.of(option.getValue(),
                 SystemMessages.render("executor.option.reasoning." + option.getValue(), null, option.getLabel()))).toList());
         vo.setContextWindows(CONTEXT_WINDOWS.stream().map(option -> SelectOptionVO.of(option.getValue(), option.getLabel())).toList());
-        vo.setMemoryModes(MEMORY_MODES.stream().map(option -> new SelectOptionVO(option.getValue(),
-                SystemMessages.render("executor.option.memory." + option.getValue().replace('-', '_') + ".label", null, option.getLabel()),
-                SystemMessages.render("executor.option.memory." + option.getValue().replace('-', '_') + ".description", null, option.getDescription()))).toList());
         vo.setDefaultModel(chooseModel(models, DEFAULT_MODEL));
         vo.setDefaultCreateModel(chooseModel(models, AUTO_MODEL));
         vo.setDefaultReasoningEffort(defaultReasoningEffort(vo.getDefaultModel()));
         vo.setDefaultContextWindow(DEFAULT_CONTEXT_WINDOW);
-        vo.setDefaultMemoryMode(DEFAULT_MEMORY_MODE);
         vo.setModelCatalogLastSuccessfulAt(catalog == null ? null : catalog.getLastSuccessfulAt());
         return vo;
     }

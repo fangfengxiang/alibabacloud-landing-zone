@@ -92,6 +92,8 @@ class WorkspaceAccessAnnotationCoverageTest {
             "com.aliyun.autowonder.branding.PlatformBrandingController#logo()",
             "com.aliyun.autowonder.branding.PlatformBrandingController#adminConfig()",
             "com.aliyun.autowonder.branding.PlatformBrandingController#publicConfig()",
+            // Public fixed module downloads contain no workspace data.
+            "com.aliyun.autowonder.executor.BundledExecutorRuntimeController#module(java.lang.String)",
             "com.aliyun.autowonder.branding.PlatformBrandingController#update("
                     + "com.aliyun.autowonder.branding.dto.UpdatePlatformBrandingRequest)",
             "com.aliyun.autowonder.branding.PlatformBrandingController#uploadLogo("

@@ -252,6 +252,19 @@ class ExecutorRestartServiceTest {
         assertEquals("COMPLETED", service.status(7).getString("status"));
     }
 
+    @Test void bundledClientsCannotApplyAnNpmLaunchOverWebSocket() {
+        var config = new ExecutorLaunchConfigService.LaunchConfig();
+        config.memoryMode = "platform";
+        when(launchConfigs.requireCompleteConfig(7L, 1L, 9)).thenReturn(config);
+        ExecutorDO executor = dao.findById(7L);
+        for (String clientKind : List.of("CLAUDE_CODE")) {
+            executor.setClientKind(clientKind);
+            assertThrows(BizException.class, () -> service.applyLaunchCommand(7L, 1L, 3L, 9));
+            assertThrows(BizException.class, () -> service.request(7L, 1L, 3L, true));
+        }
+        verifyNoInteractions(redis);
+    }
+
     @Test void historicalVersionWithoutAnExplicitPinDoesNotOverrideTheRunningVersion() {
         var config = new ExecutorLaunchConfigService.LaunchConfig();
         config.runtimeVersion = "0.3.9";

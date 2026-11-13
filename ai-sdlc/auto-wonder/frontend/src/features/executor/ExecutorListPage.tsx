@@ -2,6 +2,7 @@ import { ModelUpgradePolicyEditor } from './ModelUpgradePolicyEditor';
 import { i18n } from '@/shared/i18n';
 import { formatDateTime } from '@/shared/i18n/format';
 import { useLocalizedValidation } from '@/shared/i18n/useLocalizedValidation';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { PageHeading } from '@/shared/ui/PageHeading';
 import { RobotHeadIcon } from '@/shared/ui/RobotHeadIcon';
@@ -42,10 +43,20 @@ import { readViewPreference, writeViewPreference } from '@/shared/lib/viewPrefer
 import { detectStartupOs } from './startupOs';
 import { parseExecutorAgentParam } from './executorAgentParam';
 
-const CLIENT_KINDS: { value: string; label: string; color: string; Icon: typeof CodeOutlined | typeof RobotHeadIcon }[] = [
+type ClientKindOption = {
+  value: string;
+  color: string;
+  Icon: typeof CodeOutlined | typeof RobotHeadIcon;
+} & ({ label: string } | { labelKey: 'clientClaudeCode' });
+
+function clientKindLabel(option: ClientKindOption, t: TFunction<'executor'>): string {
+  return 'labelKey' in option ? t(option.labelKey) : option.label;
+}
+
+const CLIENT_KINDS: ClientKindOption[] = [
   { value: 'QODER_CN_CLI', label: 'Qoder CLI CN', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
   { value: 'QODER_CLI', label: 'Qoder CLI', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
-  { value: 'CLAUDE_CODE', label: 'Claude Code', color: '#d4380d', Icon: RobotHeadIcon },
+  { value: 'CLAUDE_CODE', labelKey: 'clientClaudeCode', color: '#d4380d', Icon: RobotHeadIcon },
   { value: 'CODEX_CLI', label: 'Codex CLI', color: '#13a8a8', Icon: CodeSandboxOutlined },
   { value: 'CURSOR_CLI', label: 'Cursor CLI', color: 'var(--aw-text)', Icon: CodeSandboxOutlined },
 ];
@@ -61,8 +72,8 @@ export function isClientKindMissing(kind?: string | null): boolean {
   return !kind || !kind.trim();
 }
 
-// 新建执行器仅开放 Qoder 系执行器，其余类型在列表中仍正常展示
-export const CREATABLE_CLIENT_KINDS = CLIENT_KINDS.filter((k) => isQoderClientKind(k.value));
+// 新建和补录共享可选类型。
+export const CREATABLE_CLIENT_KINDS = CLIENT_KINDS.filter((k) => isQoderClientKind(k.value) || k.value === 'CLAUDE_CODE');
 
 const EXECUTORS_VIEW_STORAGE_KEY = 'autowonder.executors.view';
 const EXECUTORS_VIEW_OPTIONS = ['agent', 'squad'] as const;
@@ -240,7 +251,8 @@ function ClientKindSelect({ value, onChange }: { value?: string; onChange?: (v: 
   const { t } = useTranslation('executor');
   return (
     <div role="group" aria-label={t('clientChoice')} style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-      {CREATABLE_CLIENT_KINDS.map(({ value: v, label, color, Icon }) => {
+      {CREATABLE_CLIENT_KINDS.map((option) => {
+        const { value: v, color, Icon } = option;
         const selected = value === v;
         return (
           <button
@@ -264,7 +276,7 @@ function ClientKindSelect({ value, onChange }: { value?: string; onChange?: (v: 
             }}
           >
             <span style={{ fontSize: 24, color }}><Icon aria-hidden="true" /></span>
-            <span style={{ fontWeight: 500 }}>{label}</span>
+            <span style={{ fontWeight: 500 }}>{clientKindLabel(option, t)}</span>
             {selected && (
               <CheckCircleFilled aria-hidden="true"
                 style={{ position: 'absolute', top: 8, right: 8, color: 'var(--aw-accent-text)', fontSize: 16 }}
@@ -650,7 +662,10 @@ export function ExecutorListPage() {
     // 启动配置随执行器一并落库，响应回显的就是数据库保存下来的值
     mutationFn: ({ agentId, name, clientKind: kind, memoryMode, maxConcurrentDispatches, model, reasoningEffort, contextWindow }:
       CreateExecutorFormValues) =>
-      createExecutor(agentId, { name, clientKind: kind, memoryMode, maxConcurrentDispatches, model, reasoningEffort, contextWindow }),
+      createExecutor(agentId, {
+        name, clientKind: kind, memoryMode, maxConcurrentDispatches,
+        ...(isQoderClientKind(kind) ? { model, reasoningEffort, contextWindow } : {}),
+      }),
     onSuccess: (data) => {
       setTokenResult(data);
       setCreateModalOpen(false);
@@ -1016,7 +1031,7 @@ export function ExecutorListPage() {
     { title: t('clientVersion'), width: 150, render: (_, record) => (
       // 历史数据的 clientKind 可为 null：明确标记「类型缺失」，绝不留空白让操作者误判客户端类型。
       <div><div>{record.clientKind
-        ? (Object.prototype.hasOwnProperty.call(clientKindMap, record.clientKind) ? clientKindMap[record.clientKind].label : record.clientKind)
+        ? (Object.prototype.hasOwnProperty.call(clientKindMap, record.clientKind) ? clientKindLabel(clientKindMap[record.clientKind], t) : record.clientKind)
         : <Tag color="warning">{t('missingClientKind')}</Tag>}</div>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.version ?? t('versionNotReported')}</Typography.Text>
         <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.modelName ?? record.model ?? t('modelNotReported')}</Typography.Text></div>
@@ -1358,7 +1373,7 @@ export function ExecutorListPage() {
             <Form.Item label={t('clientKind')} name="clientKind"
               rules={[{ required: true, message: t('selectClient') }]}
               extra={t('missingKindExtra')}>
-              <Select options={CREATABLE_CLIENT_KINDS.map(({ value, label }) => ({ value, label }))} />
+              <Select options={CREATABLE_CLIENT_KINDS.map((option) => ({ value: option.value, label: clientKindLabel(option, t) }))} />
             </Form.Item>
           )}
           <Form.Item label={t('maxConcurrent')} name="maxConcurrentDispatches"

@@ -100,6 +100,20 @@ class ExecutorUpdateServiceTest {
         org.springframework.context.i18n.LocaleContextHolder.resetLocaleContext();
         com.aliyun.autowonder.context.AutoWonderContext.destroy();
     }
+    @Test void bundledClientsNeverScheduleNpmUpgradesWhileOffline() {
+        var claude = executor(7L, 1L, "claude");
+        claude.setClientKind("CLAUDE_CODE");
+        when(executorDao.findById(7L)).thenReturn(claude);
+        when(registry.isOnline(anyLong())).thenReturn(false);
+        when(executorDao.listAll(1L, null)).thenReturn(List.of(claude));
+
+        assertThrows(BizException.class, () -> service.updateOne(7L, 1L, 3L));
+        var result = service.updateAll(1L, null, 3L);
+        assertEquals(0, result.getScheduled());
+        assertEquals(1, result.getSkipped().size());
+        assertEquals(0, taskDao.size());
+    }
+
     @Test void requestFailuresKeepStatusCodesDiagnosticsAndRawVersion() {
         org.springframework.context.i18n.LocaleContextHolder.setLocale(java.util.Locale.US);
         when(presence.currentVersion(7L)).thenReturn(TARGET);

@@ -175,7 +175,8 @@ public class ExecutorUpdateService {
         if (comparison.isPresent() && comparison.getAsInt() >= 0) {
             throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.update.up_to_date", new Object[]{target}, "执行器版本不低于目标版本 " + target + "，无需升级");
         }
-        if (registry.isOnline(executorId) && !supportsUpgrade(executorId)) {
+        if (BundledExecutorRuntime.supports(executor.getClientKind())
+                || (registry.isOnline(executorId) && !supportsUpgrade(executorId))) {
             throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.update.unsupported", null, "当前客户端不支持远程升级，请先在本地升级客户端");
         }
         if (taskDao.findActiveByExecutor(tenantId, executorId) != null) {
@@ -208,7 +209,8 @@ public class ExecutorUpdateService {
                         SystemMessages.render("executor.update.skip.active", null, "已有升级任务进行中"), "ACTIVE_TASK"));
                 continue;
             }
-            if (registry.isOnline(executorId) && !supportsUpgrade(executorId)) {
+            if (BundledExecutorRuntime.supports(executor.getClientKind())
+                    || (registry.isOnline(executorId) && !supportsUpgrade(executorId))) {
                 skipped.add(new ExecutorUpdateSkipVO(executorId, executor.getName(),
                         SystemMessages.render("executor.update.skip.unsupported", null, "客户端不支持远程升级"), "UNSUPPORTED_CLIENT"));
                 continue;
@@ -245,7 +247,7 @@ public class ExecutorUpdateService {
                 complete(active, reported);
                 return;
             }
-            if (frameRefusesUpgrade(frame)) {
+            if (BundledExecutorRuntime.isBundledVersion(version) || frameRefusesUpgrade(frame)) {
                 // A heartbeat that never reaches the deadline gate is the only chance to close a task
                 // whose client turned out to be too old on reconnect: the sweep reads Redis presence,
                 // which is exactly the signal that said "unknown" while this executor was offline.
@@ -263,7 +265,8 @@ public class ExecutorUpdateService {
             return;
         }
         ExecutorDO executor = executorDao.findById(executorId);
-        if (executor == null || !Objects.equals(executor.getTenantId(), session.getTenantId())) {
+        if (executor == null || !Objects.equals(executor.getTenantId(), session.getTenantId())
+                || BundledExecutorRuntime.supports(executor.getClientKind())) {
             return;
         }
         var launchConfig = ExecutorLaunchConfigService.parse(executor.getLaunchConfig());
@@ -397,7 +400,8 @@ public class ExecutorUpdateService {
         Date cooldownStart = Date.from(Instant.now().minusSeconds(AUTO_RETRY_COOLDOWN_SECONDS));
         for (ExecutorDO executor : executorDao.listForVersionScan()) {
             long executorId = executor.getId();
-            if (!registry.isOnline(executorId) || !supportsUpgrade(executorId)) {
+            if (BundledExecutorRuntime.supports(executor.getClientKind())
+                    || !registry.isOnline(executorId) || !supportsUpgrade(executorId)) {
                 continue;
             }
             String reported = reportedVersion(executor);

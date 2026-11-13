@@ -78,9 +78,12 @@ public class ExecutorRestartService {
         if (executor == null || !Objects.equals(executor.getTenantId(), tenantId)) throw new BizException(ErrorCode.EXECUTOR_NOT_FOUND);
         if (!registry.isOnline(id)) throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.restart.offline", null, "执行器离线，无法远程重启");
         String feature = launch != null ? "EXECUTOR_LAUNCH_COMMAND_V1" : update ? "EXECUTOR_UPDATE_RESTART_V1" : "EXECUTOR_RESTART_V1";
-        if (launch != null && !presence.supportsProtocolFeature(id, feature)) throw BizException.keyed(ErrorCode.PARAM_INVALID,
-                "executor.command.online_unsupported", null, "当前客户端不支持在线应用启动命令，请先在本地升级客户端");
-        if (!presence.supportsProtocolFeature(id, feature)) throw BizException.keyed(ErrorCode.PARAM_INVALID,
+        boolean bundled = BundledExecutorRuntime.supports(executor.getClientKind());
+        if (launch != null && (bundled || !presence.supportsProtocolFeature(id, feature))) {
+            throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.online_unsupported", null,
+                    "当前客户端不支持在线应用启动命令，请先在本地升级客户端");
+        }
+        if ((update && bundled) || !presence.supportsProtocolFeature(id, feature)) throw BizException.keyed(ErrorCode.PARAM_INVALID,
                 update ? "executor.restart.update_unsupported" : "executor.restart.unsupported", null,
                 update ? "当前客户端不支持发布版更新，请在本地更新源码或升级客户端" : "当前客户端不支持远程重启，请先在本地升级客户端");
         if (restartMode != null && !presence.supportsProtocolFeature(id, "EXECUTOR_RESTART_POLICY_V1")) {

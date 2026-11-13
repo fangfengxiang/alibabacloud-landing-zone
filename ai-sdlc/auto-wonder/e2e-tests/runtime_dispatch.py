@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in real Qoder dispatch check. Never print raw exceptions or responses."""
+"""Opt-in real executor dispatch check. Never print raw exceptions or responses."""
 import argparse
 import fcntl
 import json
@@ -10,6 +10,7 @@ import hashlib
 import re
 import secrets
 import signal
+import shlex
 import shutil
 import subprocess
 import sys
@@ -121,7 +122,19 @@ def step_request(instruction):
             "timeoutSeconds": 300, "retryBudget": 0}
 
 
-def reserve_executor(api, agent_id, lock_root):
+RUNTIME_CLIENT_KINDS = {"qoder": "QODER_CLI", "claude": "CLAUDE_CODE"}
+CLAUDE_GATEWAY_ENV = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
+                      "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
+                      "ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
+
+
+def claude_gateway_configured():
+    return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()
+                or (os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip()
+                    and os.environ.get("ANTHROPIC_BASE_URL", "").strip()))
+
+
+def reserve_executor(api, agent_id, lock_root, provider="qoder"):
     # Fresh databases reuse numeric IDs. Never overwrite a host runtime lock
     # belonging to another server/run, even if that lock is currently inactive.
     occupied = {path.name for path in lock_root.glob("executor-*.lock")
@@ -131,7 +144,7 @@ def reserve_executor(api, agent_id, lock_root):
     # Concurrent new locks still fail closed within this snapshot-derived bound.
     for _ in range(len(occupied) + 1):
         executor = api.call("POST", f"/api/agents/{agent_id}/executors",
-                           {"name": "runtime-e2e", "clientKind": "QODER_CLI"})
+                           {"name": "runtime-e2e", "clientKind": RUNTIME_CLIENT_KINDS[provider]})
         executor_id = int(executor["id"])
         lock = lock_root / f"executor-{executor_id}.lock"
         repeated = executor_id in seen
@@ -227,7 +240,19 @@ class OwnedRuntime:
         root = self.directory.name
         # Do not forward unrelated credentials or runtime settings from the host.
         env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG",
-               "QODER_PERSONAL_ACCESS_TOKEN", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY") if k in os.environ}
+               "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY") if k in os.environ}
+        provider = self.connection_env.get("AUTOWONDER_PROVIDER")
+        if provider == "claude":
+            if claude_gateway_configured():
+                env.update({key: os.environ[key] for key in CLAUDE_GATEWAY_ENV if key in os.environ})
+                claude_home = Path(root) / "claude"
+                claude_home.mkdir(mode=0o700)
+                (claude_home / ".claude.json").write_text('{"hasCompletedOnboarding":true}')
+                env["CLAUDE_CONFIG_DIR"] = str(claude_home)
+            else:
+                env["CLAUDE_CONFIG_DIR"] = os.environ["AW_E2E_CLAUDE_HOME"]
+        elif "QODER_PERSONAL_ACCESS_TOKEN" in os.environ:
+            env["QODER_PERSONAL_ACCESS_TOKEN"] = os.environ["QODER_PERSONAL_ACCESS_TOKEN"]
         env.update(self.connection_env)
         env.update(AUTOWONDER_WORKSPACE_ROOT=root + "/workspaces",
                    AUTOWONDER_ASSIGNMENT_QUEUE_DIR=root + "/assignments",
@@ -350,12 +375,13 @@ class Api:
             raise CheckFailure("ARTIFACT_DOWNLOAD_FAILED") from None
 
 
-def run_scenario(binary, state, base, storage_origin, recommendation):
+def run_scenario(binary, state, base, storage_origin, recommendation, provider="qoder"):
     if not state or not state.is_dir() or state.is_symlink():
         raise CheckFailure("LIFECYCLE_STATE_REQUIRED")
     api = Api(base)
     validate_download(storage_origin, storage_origin)
     evidence = dict(recommendation, verdict="FAIL", checks=[], cleanup=False)
+    print(f"RUNTIME_PROVIDER={provider}", flush=True)
     executor_id = None
     owned = None
     try:
@@ -395,14 +421,25 @@ def run_scenario(binary, state, base, storage_origin, recommendation):
         if agent.get("status") != "ONLINE" or not agent.get("onlineVersionId"):
             raise CheckFailure("AGENT_ONLINE_VERSION_REQUIRED")
         evidence["agentVersionId"] = agent["onlineVersionId"]
-        executor = reserve_executor(api, agent_id, Path.home() / ".autowonder/run")
+        executor = reserve_executor(api, agent_id, Path.home() / ".autowonder/run", provider)
         executor_id = evidence["executorId"] = executor["id"]
-        connection = {"AUTOWONDER_PROVIDER": "qoder", "AUTOWONDER_EXECUTOR_ID": str(executor_id),
+        connection = {"AUTOWONDER_PROVIDER": provider, "AUTOWONDER_EXECUTOR_ID": str(executor_id),
             "AUTOWONDER_EXECUTOR_TOKEN": executor["token"],
             "AUTOWONDER_SERVER_WS_URL": base.replace("http://", "ws://", 1) + "/ws/executor",
             "AUTOWONDER_DAEMON_ID": "e2e-" + suffix, "AUTOWONDER_RUNTIME_ID": "e2e-" + suffix}
+        argv = [str(binary)]
+        if provider != "qoder":
+            stored_config = api.call("GET", f"/api/executors/{executor_id}/launch-config")
+            api.call("PUT", f"/api/executors/{executor_id}/launch-config",
+                     {"version": stored_config["version"], "memoryMode": "none", "maxConcurrentDispatches": 1})
+            launch = api.call("POST", f"/api/executors/{executor_id}/launch-command",
+                              {"os": "posix", "shell": "bash"})
+            argv = local_launch_argv(binary, launch, connection)
+            evidence["runtimeVersion"] = launch["runtimeVersion"]
+            evidence["runtimeRecommendationSource"] = "community-executor"
+            evidence["checks"].append("generated_launch_command")
         print("RUNTIME_PHASE=WAIT_ONLINE", flush=True)
-        owned = OwnedRuntime([str(binary)], connection, state)
+        owned = OwnedRuntime(argv, connection, state)
         with owned as process:
             def online():
                 if process.poll() is not None:
@@ -468,11 +505,66 @@ def run_scenario(binary, state, base, storage_origin, recommendation):
     print("RUNTIME_DISPATCH=PASS", flush=True)
 
 
-def preflight(runtime_version=None):
-    if not os.environ.get("QODER_PERSONAL_ACCESS_TOKEN", "").strip():
-        raise CheckFailure("QODER_TOKEN_REQUIRED")
-    if not shutil.which("qodercli"):
-        raise CheckFailure("QODER_CLI_REQUIRED")
+def local_launch_argv(binary, launch, connection):
+    try:
+        argv = shlex.split(launch["command"])
+        if len(argv) < 6 or argv[:3] != ["node", "--input-type=module", "--eval"] or argv[4] != "--":
+            raise ValueError
+        for name, expected in (
+            ("--provider", connection["AUTOWONDER_PROVIDER"]),
+            ("--executor-id", connection["AUTOWONDER_EXECUTOR_ID"]),
+            ("--token", connection["AUTOWONDER_EXECUTOR_TOKEN"]),
+            ("--ws-url", connection["AUTOWONDER_SERVER_WS_URL"]),
+        ):
+            if argv.count(name) != 1 or argv[argv.index(name) + 1] != expected:
+                raise ValueError
+        if not str(launch["runtimeVersion"]).startswith("community-"):
+            raise ValueError
+        token_index = argv.index("--token")
+        return [str(binary), *argv[1:token_index], *argv[token_index + 2:]]
+    except (KeyError, TypeError, ValueError, IndexError):
+        raise CheckFailure("LOCAL_EXECUTOR_LAUNCH_COMMAND_INVALID") from None
+
+
+def require_provider_cli(provider):
+    if provider == "qoder":
+        if not os.environ.get("QODER_PERSONAL_ACCESS_TOKEN", "").strip():
+            raise CheckFailure("QODER_TOKEN_REQUIRED")
+        if not shutil.which("qodercli"):
+            raise CheckFailure("QODER_CLI_REQUIRED")
+        return
+
+    label = provider.upper()
+    binary = shutil.which(provider)
+    if not binary:
+        raise CheckFailure(f"{label}_CLI_REQUIRED")
+    if provider == "claude" and claude_gateway_configured():
+        return
+    configured_home = os.environ.get(f"AW_E2E_{label}_HOME", "")
+    cli_home = Path(configured_home)
+    if (not cli_home.is_absolute() or not cli_home.is_dir()
+            or cli_home.resolve() == (Path.home() / f".{provider}").resolve()):
+        raise CheckFailure(f"{label}_TEST_HOME_REQUIRED")
+    home_key = "CLAUDE_CONFIG_DIR"
+    auth_command = "auth"
+    try:
+        result = subprocess.run([binary, auth_command, "status"],
+            env={"PATH": os.environ.get("PATH", ""), "HOME": str(Path.home()), home_key: configured_home},
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+        if result.returncode != 0:
+            raise CheckFailure(f"{label}_AUTH_REQUIRED")
+    except (OSError, subprocess.TimeoutExpired):
+        raise CheckFailure(f"{label}_AUTH_REQUIRED") from None
+
+
+def preflight(runtime_version=None, provider="qoder", project_root=None):
+    require_provider_cli(provider)
+    if provider != "qoder":
+        root = project_root or Path(__file__).resolve().parents[1]
+        node = root / "target/node/node"
+        if not node.is_file() or not os.access(node, os.X_OK):
+            raise CheckFailure("COMMUNITY_EXECUTOR_NODE_REQUIRED")
+        return node.resolve()
     if runtime_version is None:
         runtime_version = source_runtime_version(Path(__file__).resolve().parents[1])
     if not valid_runtime_version(runtime_version):
@@ -523,9 +615,12 @@ def main():
         if args.print_recommended_version:
             print(recommendation["runtimeVersion"])
             return 0
-        binary = preflight(recommendation["runtimeVersion"])
+        provider = os.environ.get("AW_E2E_RUNTIME_PROVIDER", "qoder")
+        if provider not in RUNTIME_CLIENT_KINDS:
+            raise CheckFailure("RUNTIME_PROVIDER_UNSUPPORTED")
+        binary = preflight(recommendation["runtimeVersion"], provider, args.project_root)
         if args.run:
-            run_scenario(binary, args.state_dir, args.base_url, args.storage_origin, recommendation)
+            run_scenario(binary, args.state_dir, args.base_url, args.storage_origin, recommendation, provider)
             return 0
         print("RUNTIME_PREFLIGHT=PASS")
         return 0

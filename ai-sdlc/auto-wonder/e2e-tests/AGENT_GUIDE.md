@@ -77,7 +77,7 @@ unexpected `ERROR` or `WARN` records. A nonzero exit, `VERDICT=FAIL`, or failing
 
 ## Diagnose a failure
 
-### Optional real Qoder task dispatch
+### Optional real runtime task dispatch
 
 Use an already-injected `QODER_PERSONAL_ACCESS_TOKEN`; never print it, put it in
 arguments, or save it to a file. The installed `qodercli` must be on PATH.
@@ -116,6 +116,20 @@ configuration with the tested source and repeat the lifecycle normally.
 ```bash
 ./e2e-tests/verify.sh --check --with-runtime --project-root "$(pwd -P)"
 ```
+
+For the bundled Claude Code executor, select
+`AW_E2E_RUNTIME_PROVIDER=claude`.
+Set `AW_E2E_CLAUDE_HOME` to an absolute, dedicated,
+already authenticated CLI directory. Keep credential files in that private
+directory and remove it after the run. These scenarios use the lifecycle Node
+binary to execute the platform-generated command, including its runtime bundle
+download. The npm package installation above applies to the default Qoder
+scenario. A Claude API-key run can instead inherit `ANTHROPIC_API_KEY`, or the
+gateway pair `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` plus optional
+model variables. The check creates a private CLI directory and uses these
+credentials without running Claude account login. Supply the key from a local
+secret store. For automated Bailian tasks, use a pay-as-you-go API key with
+the Anthropic-compatible endpoint for its region.
 
 This opt-in check requires a real online executor, successful task dispatch and
 downloaded artifact validation; missing prerequisites fail rather than skip.

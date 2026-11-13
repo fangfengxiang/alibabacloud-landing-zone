@@ -29,6 +29,12 @@ npx -y autowonder connect --ws-url wss://autowonder.example.com/ws/executor \
   --token xxx --executor-id 10000 --provider qoder
 ```
 
+### 使用 Claude Code
+
+在执行机安装 Node.js 22 或更新版本，并配置所选 CLI 的认证。Claude Code 也可使用本机配置的 Anthropic 兼容网关。在平台创建对应类型的执行器，复制并运行页面生成的启动命令。命令会从当前平台下载执行器模块并校验 SHA-256，然后连接调度器。工单执行使用本机 CLI 默认模型，产物通过平台的派发产物接口回传。
+
+此路径支持普通工单派发、进度、终态和交付物。检查点恢复、在线升级及对话轮次属于独立协议能力，当前执行器不会声明这些能力。下文的 npm runtime 命令适用于 Qoder 系列。
+
 ## 3. 常用参数
 
 | 参数 | 说明 |

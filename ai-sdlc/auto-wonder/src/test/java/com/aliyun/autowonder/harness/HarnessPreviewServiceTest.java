@@ -33,7 +33,6 @@ class HarnessPreviewServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(launchOptions.requireCreatableClientKind("QODER_CLI")).thenReturn("QODER_CLI");
         onboarding = onboardingService.prepare(7L, 70L,
                 Map.of("draft", Map.of("templateKey", "software-delivery"))).onboarding();
     }
@@ -275,12 +274,13 @@ class HarnessPreviewServiceTest {
                 () -> preview(
                         Map.of("onboardingId", 999999L, "expectedVersion", 0, "clientKind", "QODER_CLI")))
                 .getCode());
-        when(launchOptions.requireCreatableClientKind("BAD")).thenThrow(
-                new BizException(ErrorCode.MCP_TOOL_ARGUMENT_INVALID));
-        assertEquals(ErrorCode.MCP_TOOL_ARGUMENT_INVALID.getCode(), assertThrows(BizException.class,
-                () -> preview(
-                        Map.of("onboardingId", onboarding.id(), "expectedVersion", onboarding.version(),
-                                "clientKind", "BAD"))).getCode());
+        for (String unsupported : List.of("BAD", "CODEX_CLI", " claude_code ")) {
+            BizException failure = assertThrows(BizException.class, () -> preview(
+                    Map.of("onboardingId", onboarding.id(), "expectedVersion", onboarding.version(),
+                            "clientKind", unsupported)));
+            assertEquals(ErrorCode.MCP_TOOL_ARGUMENT_INVALID.getCode(), failure.getCode());
+            assertEquals("clientKind 仅支持 QODER_CLI/QODER_CN_CLI", failure.getMessage());
+        }
     }
 
     @Test

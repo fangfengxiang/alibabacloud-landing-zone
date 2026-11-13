@@ -103,7 +103,6 @@
   {"file":"src/features/execution/components/ExecutionDetailDrawer.tsx","kind":"jsx-text","text":"v","reason":"Version number prefix, identical in both locales."},
   {"file":"src/features/executor/ExecutorListPage.tsx","kind":"literal","text":"Qoder CLI CN","reason":"Client product name; preserved exactly in both locales."},
   {"file":"src/features/executor/ExecutorListPage.tsx","kind":"literal","text":"Qoder CLI","reason":"Client product name; preserved exactly in both locales."},
-  {"file":"src/features/executor/ExecutorListPage.tsx","kind":"literal","text":"Claude Code","reason":"Client product name; preserved exactly in both locales."},
   {"file":"src/features/executor/ExecutorListPage.tsx","kind":"literal","text":"Codex CLI","reason":"Client product name; preserved exactly in both locales."},
   {"file":"src/features/executor/ExecutorListPage.tsx","kind":"literal","text":"Cursor CLI","reason":"Client product name; preserved exactly in both locales."},
   {"file":"src/features/executor/ExecutorListPage.tsx","kind":"jsx-text","text":"ID","reason":"Protocol identifier abbreviation; identical in both locales."},

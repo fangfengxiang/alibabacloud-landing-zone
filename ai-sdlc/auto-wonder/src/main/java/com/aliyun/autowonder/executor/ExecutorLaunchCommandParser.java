@@ -16,14 +16,17 @@ final class ExecutorLaunchCommandParser {
     private static final Set<String> VALUE_FLAGS = Set.of("ws-url", "token", "executor-id", "provider", "name",
             "max-tasks", "model", "reasoning-effort", "context-window", "memory-mode", "workspace-root");
     private static final Set<String> BOOLEAN_FLAGS = Set.of("debug", "token-aware-enable");
+    private static final Set<String> BUNDLED_UNSUPPORTED_FLAGS =
+            Set.of("model", "reasoning-effort", "context-window", "token-aware-enable");
 
     private ExecutorLaunchCommandParser() { }
 
     static UpdateExecutorLaunchConfigRequest parse(String command, String baseline, Integer version) {
         List<String> argv = words(command);
-        Map<String, String> flags = flags(argv);
         List<String> baselineArgv = words(baseline);
-        Map<String, String> expected = flags(baselineArgv);
+        boolean bundled = "node".equals(baselineArgv.get(0));
+        Map<String, String> flags = flags(argv, bundled);
+        Map<String, String> expected = flags(baselineArgv, bundled);
         for (String key : List.of("ws-url", "token", "executor-id", "provider", "token-aware-enable")) {
             if (!Objects.equals(flags.get(key), expected.get(key))) {
                 throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.identity_changed", null,
@@ -33,14 +36,16 @@ final class ExecutorLaunchCommandParser {
         for (String key : List.of("memory-mode", "max-tasks", "model", "reasoning-effort", "context-window")) {
             if (expected.containsKey(key) && !flags.containsKey(key)) throw invalid();
         }
-        String runtimeVersion = argv.get(2).substring(argv.get(2).startsWith("@alicloud/")
-                ? "@alicloud/autowonder@".length() : "autowonder@".length());
-        if (!runtimeVersion.matches("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)")
-                || RuntimeVersion.compare(runtimeVersion, runtimeVersion).isEmpty()) throw invalid();
         var result = new UpdateExecutorLaunchConfigRequest();
         result.setVersion(version);
-        // 只在版本被明确修改时固定版本，保存其他参数时保留已有的版本选择方式。
-        result.setRuntimeVersion(baselineArgv.get(2).endsWith("@" + runtimeVersion) ? null : runtimeVersion);
+        if (!bundled) {
+            String runtimeVersion = argv.get(2).substring(argv.get(2).startsWith("@alicloud/")
+                    ? "@alicloud/autowonder@".length() : "autowonder@".length());
+            if (!runtimeVersion.matches("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)")
+                    || RuntimeVersion.compare(runtimeVersion, runtimeVersion).isEmpty()) throw invalid();
+            // 只在版本被明确修改时固定版本，保存其他参数时保留已有的版本选择方式。
+            result.setRuntimeVersion(baselineArgv.get(2).endsWith("@" + runtimeVersion) ? null : runtimeVersion);
+        }
         result.setWorkspaceRoot(flags.getOrDefault("workspace-root", ""));
         result.setDaemonName(flags.getOrDefault("name", ""));
         result.setDebug(flags.containsKey("debug"));
@@ -56,16 +61,23 @@ final class ExecutorLaunchCommandParser {
         return result;
     }
 
-    private static Map<String, String> flags(List<String> argv) {
-        if (argv.size() < 4 || !"npx".equals(argv.get(0))
+    private static Map<String, String> flags(List<String> argv, boolean bundled) {
+        int start = 4;
+        if (bundled) {
+            List<String> prefix = BundledExecutorRuntime.commandPrefix();
+            start = prefix.size();
+            if (argv.size() < start || !prefix.equals(argv.subList(0, start))) throw invalid();
+        } else if (argv.size() < 4 || !"npx".equals(argv.get(0))
                 || !("-y".equals(argv.get(1)) || "--yes".equals(argv.get(1)))
-                || !(argv.get(2).startsWith("autowonder@") || argv.get(2).startsWith("@alicloud/autowonder@")) || !"connect".equals(argv.get(3))) throw invalid();
+                || !(argv.get(2).startsWith("autowonder@") || argv.get(2).startsWith("@alicloud/autowonder@"))
+                || !"connect".equals(argv.get(3))) throw invalid();
         Map<String, String> result = new HashMap<>();
-        for (int index = 4; index < argv.size(); index++) {
+        for (int index = start; index < argv.size(); index++) {
             String argument = argv.get(index);
             if (!argument.startsWith("--")) throw invalid();
             String[] pair = argument.substring(2).split("=", 2);
             String key = pair[0];
+            if (bundled && BUNDLED_UNSUPPORTED_FLAGS.contains(key)) throw invalid();
             String value;
             if (BOOLEAN_FLAGS.contains(key) && pair.length == 1) {
                 value = "true";
@@ -123,6 +135,6 @@ final class ExecutorLaunchCommandParser {
 
     private static BizException invalid() {
         return BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.invalid", null,
-                "启动命令格式无效，请使用固定版本的 npx connect 命令和受支持的启动参数，不使用其他 Shell 命令");
+                "启动命令格式无效，请使用平台生成的启动命令和受支持的启动参数，不使用其他 Shell 命令");
     }
 }

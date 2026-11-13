@@ -130,11 +130,11 @@ class ExecutorLaunchOptionsServiceTest {
 
     @Test
     void launchOptionsRejectsClientKindsTheCreateFormHides() {
-        for (String clientKind : new String[]{"CLAUDE_CODE", "CODEX_CLI", "CURSOR_CLI", "QODER_WEB", null, " "}) {
+        for (String clientKind : new String[]{"CODEX_CLI", "CURSOR_CLI", "QODER_WEB", null, " "}) {
             BizException ex = assertThrows(BizException.class, () -> service.launchOptions(WORKSPACE, clientKind),
                     String.valueOf(clientKind));
             assertEquals("27003", ex.getCode(), String.valueOf(clientKind));
-            assertTrue(ex.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI"), ex.getMessage());
+            assertTrue(ex.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE"), ex.getMessage());
         }
         verify(modelCatalogService, never()).read(anyLong(), anyString());
     }
@@ -154,13 +154,29 @@ class ExecutorLaunchOptionsServiceTest {
     }
 
     @Test
-    void creatableClientKindsExposeOnlyTheQoderCliFamily() {
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI"), ExecutorLaunchOptionsService.creatableClientKindValues());
-        assertEquals(List.of("Qoder CLI", "Qoder CLI CN"),
+    void creatableClientKindsIncludeClaudeCode() {
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE"), ExecutorLaunchOptionsService.creatableClientKindValues());
+        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code"),
                 ExecutorLaunchOptionsService.creatableClientKinds().stream()
                         .map(SelectOptionVO::getLabel).toList());
         assertEquals("国际版 Qoder CLI 执行器",
                 ExecutorLaunchOptionsService.creatableClientKinds().get(0).getDescription());
+    }
+
+    @Test
+    void claudeUsesLocalModelSettings() {
+        ExecutorLaunchOptionsVO vo = service.launchOptions(WORKSPACE, "claude_code");
+
+        assertEquals("CLAUDE_CODE", vo.getClientKind());
+        assertEquals("claude", vo.getProvider());
+        assertEquals("platform", vo.getDefaultMemoryMode());
+        assertTrue(vo.getModels().isEmpty());
+        assertTrue(vo.getReasoningEfforts().isEmpty());
+        assertTrue(vo.getContextWindows().isEmpty());
+        assertNull(vo.getDefaultModel());
+        assertNull(vo.getDefaultCreateModel());
+        assertNull(vo.getDefaultReasoningEffort());
+        assertNull(vo.getDefaultContextWindow());
     }
 
     @Test
@@ -189,7 +205,7 @@ class ExecutorLaunchOptionsServiceTest {
         assertNull(ExecutorLaunchOptionsService.canonicalClientKind("QODER_WEB"));
         assertNull(ExecutorLaunchOptionsService.canonicalClientKind(null));
         assertTrue(ExecutorLaunchOptionsService.isCreatableClientKind("Qoder_Cn_Cli"));
-        assertFalse(ExecutorLaunchOptionsService.isCreatableClientKind("CLAUDE_CODE"));
+        assertTrue(ExecutorLaunchOptionsService.isCreatableClientKind("CLAUDE_CODE"));
         assertTrue(ExecutorLaunchOptionsService.isQoderFamily("qoder"));
         assertTrue(ExecutorLaunchOptionsService.isQoderFamily("qodercn"));
         assertFalse(ExecutorLaunchOptionsService.isQoderFamily("claude"));

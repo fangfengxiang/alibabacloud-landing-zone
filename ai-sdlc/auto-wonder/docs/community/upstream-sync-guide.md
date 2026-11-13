@@ -37,7 +37,7 @@ required for a community build and runtime.
      environment inventory is intentional and permanent; the configuration-key
      audit in step 4 must not report it as a missing key. Do not reintroduce them
      in a later sync;
-   - the community frontend supports creating Qoder CLI executors only; preserve
+   - the community frontend supports creating Qoder CLI, Qoder CLI CN, and Claude Code executors; preserve
      this restriction when syncing executor UI changes from master;
    - the supported release target remains Linux x86_64 until expanded explicitly.
    - all product Skills live under root `skills/` (not `docs/skills/`); sync

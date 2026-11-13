@@ -11,6 +11,8 @@ import com.aliyun.autowonder.storage.InMemoryObjectStorage;
 import com.aliyun.autowonder.storage.OssProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -163,21 +165,34 @@ class ExecutorLaunchCommandServiceTest {
         assertNull(vo.getContextWindow());
     }
 
-    @Test
-    void legacyClientKindDropsQoderOnlyFlagsAndModelValues() {
-        ExecutorLaunchCommandVO vo = build("awexec_plain", "CLAUDE_CODE", "provider-local", "qmodel_latest",
+    @ParameterizedTest
+    @CsvSource({"CLAUDE_CODE, claude"})
+    void localCliUsesBundledRuntimeAndOmitsQoderFlags(String clientKind, String provider) {
+        ExecutorLaunchCommandVO vo = build("awexec_plain", clientKind, "provider-local", "qmodel_latest",
                 "medium", "260000", "posix", false, null);
 
-        assertEquals("claude", vo.getProvider());
-        assertEquals("npx -y @alicloud/autowonder@" + RUNTIME_VERSION + " connect"
-                + " --ws-url " + WS_URL
+        assertEquals(provider, vo.getProvider());
+        assertTrue(vo.getRuntimeVersion().matches("community-[0-9a-f]{12}"));
+        String command = vo.getCommand();
+        assertTrue(command.startsWith("node --input-type=module --eval "));
+        assertTrue(command.endsWith(" -- --ws-url " + WS_URL
                 + " --token awexec_plain"
                 + " --executor-id 9"
-                + " --provider claude"
-                + " --memory-mode provider-local --max-tasks 5", vo.getCommand());
+                + " --provider " + provider
+                + " --memory-mode provider-local --max-tasks 5"));
         assertNull(vo.getModel());
         assertNull(vo.getReasoningEffort());
         assertNull(vo.getContextWindow());
+
+        var parsed = ExecutorLaunchCommandParser.parse(
+                command.replace("--max-tasks 5", "--max-tasks 2") + " --debug", command, 9);
+        assertEquals(2, parsed.getMaxConcurrentDispatches());
+        assertNull(parsed.getRuntimeVersion());
+        assertTrue(parsed.getDebug());
+        assertThrows(BizException.class, () -> ExecutorLaunchCommandParser.parse(
+                command.replace("data:text/javascript", "data:text/plain"), command, 9));
+        assertThrows(BizException.class, () -> ExecutorLaunchCommandParser.parse(
+                command + " --model qmodel_latest", command, 9));
     }
 
     @Test

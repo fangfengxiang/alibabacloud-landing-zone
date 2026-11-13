@@ -27,6 +27,9 @@ import java.util.Map;
  */
 @Service
 public class HarnessPreviewService {
+    public static final List<String> SUPPORTED_CLIENT_KINDS = List.of(
+            ExecutorLaunchOptionsService.CLIENT_KIND_QODER_CLI,
+            ExecutorLaunchOptionsService.CLIENT_KIND_QODER_CN_CLI);
 
     private static final int SNAPSHOT_TTL_MINUTES = 30;
 
@@ -50,8 +53,13 @@ public class HarnessPreviewService {
         if (expectedVersion != null && !expectedVersion.equals(onboarding.getVersion())) {
             throw new BizException(ErrorCode.HARNESS_ONBOARDING_VERSION_CONFLICT);
         }
-        String clientKind = launchOptions.requireCreatableClientKind(
-                requiredText(WorkspaceOnboardingService.stringArg(args, "clientKind"), "clientKind"));
+        String clientKind = ExecutorLaunchOptionsService.canonicalClientKind(
+                WorkspaceOnboardingService.stringArg(args, "clientKind"));
+        if (clientKind == null || !SUPPORTED_CLIENT_KINDS.contains(clientKind)) {
+            throw BizException.keyed(ErrorCode.MCP_TOOL_ARGUMENT_INVALID, "executor.option.only_supported",
+                    new Object[]{"clientKind", String.join("/", SUPPORTED_CLIENT_KINDS)},
+                    "clientKind 仅支持 " + String.join("/", SUPPORTED_CLIENT_KINDS));
+        }
         String templateKey = firstNonNull(WorkspaceOnboardingService.stringArg(args, "templateId"),
                 onboarding.getTemplateKey());
         HarnessTemplate template = catalog.require(templateKey,
@@ -360,13 +368,6 @@ public class HarnessPreviewService {
         conflict.put("modelFamily", family);
         conflict.put("message", message);
         return conflict;
-    }
-
-    private String requiredText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new BizException(ErrorCode.MCP_TOOL_ARGUMENT_INVALID);
-        }
-        return value;
     }
 
     private long required(Long value, String field) {

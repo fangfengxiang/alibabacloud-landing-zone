@@ -77,7 +77,6 @@ class HarnessInitializationServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(launchOptions.requireCreatableClientKind("QODER_CLI")).thenReturn("QODER_CLI");
         when(launchOptions.liveCatalog(9L, "qoder")).thenReturn(catalog());
         when(skillService.list(anyLong(), anyString(), anyInt(), anyInt())).thenReturn(List.of());
         when(sdlcService.list(anyLong(), isNull(), isNull(), isNull(), anyInt(), anyInt())).thenReturn(List.of());

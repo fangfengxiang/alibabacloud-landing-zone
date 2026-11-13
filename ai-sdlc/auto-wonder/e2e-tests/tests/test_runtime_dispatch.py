@@ -46,6 +46,23 @@ class RuntimeSafetyTests(unittest.TestCase):
                     self.fail(f"{field} must be valid JSON, not an enum string")
         self.assertEqual(payload["instructionMd"], "write the proof")
 
+    def test_local_runtime_executes_the_generated_command_without_a_shell(self):
+        connection = {"AUTOWONDER_PROVIDER": "claude", "AUTOWONDER_EXECUTOR_ID": "9",
+                      "AUTOWONDER_EXECUTOR_TOKEN": "test-token",
+                      "AUTOWONDER_SERVER_WS_URL": "ws://127.0.0.1:7001/ws/executor"}
+        command = ("node --input-type=module --eval 'await run()' -- "
+                   "--provider claude --executor-id 9 --token test-token "
+                   "--ws-url ws://127.0.0.1:7001/ws/executor")
+        launch = {"command": command, "runtimeVersion": "community-test"}
+        args = runtime.local_launch_argv(Path("/test/node"), launch, connection)
+        self.assertEqual(args[:5], ["/test/node", "--input-type=module", "--eval", "await run()", "--"])
+        self.assertNotIn("--token", args)
+        self.assertNotIn("test-token", args)
+        with self.assertRaisesRegex(runtime.CheckFailure, "LOCAL_EXECUTOR_LAUNCH_COMMAND_INVALID"):
+            runtime.local_launch_argv(Path("/test/node"),
+                                      dict(launch, command=command.replace("--provider claude", "--provider qoder")),
+                                      connection)
+
     def test_executor_selection_preserves_existing_host_lock(self):
         fn = self.function("reserve_executor")
         class FakeApi:

@@ -214,12 +214,30 @@ class ExecutorServiceTest {
     }
 
     @Test
+    void createsClaudeExecutorWithLocalModelSettings() {
+        doAnswer(inv -> { ((ExecutorDO) inv.getArgument(0)).setId(1L); return null; })
+                .when(executorDao).insert(any());
+        when(tokenService.issue(1L))
+                .thenReturn(new TokenService.IssuedToken("plain-claude", "sha256:claude"));
+        CreateExecutorRequest req = new CreateExecutorRequest();
+        req.setName("claude-runner");
+        req.setClientKind(" claude_code ");
+        req.setMemoryMode("provider-local");
+
+        IssuedExecutorVO vo = service.create(5L, req, 100L, 7L);
+
+        verify(executorDao).insert(argThat((ExecutorDO e) -> "CLAUDE_CODE".equals(e.getClientKind())));
+        assertEquals("CLAUDE_CODE", vo.getClientKind());
+        assertEquals("provider-local", vo.getMemoryMode());
+        assertNull(vo.getModel());
+    }
+
+    @Test
     void create_non_creatable_client_kind_is_rejected_like_the_mcp_entry() {
-        // 工单要求 REST 与 MCP 创建入口校验一致：非 Qoder 系类型不再允许经 REST 落库。
-        // 旧行为是创建成功且启动配置只存记忆模式，与 MCP 入口不一致，本次修复消除。
+        // REST 和 MCP 共用可创建类型校验。
         CreateExecutorRequest req = new CreateExecutorRequest();
         req.setName("legacy-cli");
-        req.setClientKind("CLAUDE_CODE");
+        req.setClientKind("CODEX_CLI");
         req.setMemoryMode("provider-local");
 
         BizException ex = assertThrows(BizException.class, () -> service.create(5L, req, 100L, 7L));

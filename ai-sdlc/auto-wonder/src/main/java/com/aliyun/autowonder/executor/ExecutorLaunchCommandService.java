@@ -142,15 +142,17 @@ public class ExecutorLaunchCommandService {
             throw BizException.keyed(ErrorCode.SYSTEM_ERROR, "executor.mcp_address_missing", null, "平台 MCP 地址未配置，无法生成执行器启动命令");
         }
         // 只有明确保存的新固定版本生效；历史残留值继续跟随平台推荐版本。
-        String runtimeVersion = Boolean.TRUE.equals(config.runtimeVersionPinned) && config.runtimeVersion != null
-                ? config.runtimeVersion : brandingService.recommendedRuntimeVersion();
+        boolean bundled = BundledExecutorRuntime.supports(clientKind);
+        String runtimeVersion = bundled ? BundledExecutorRuntime.version()
+                : Boolean.TRUE.equals(config.runtimeVersionPinned) && config.runtimeVersion != null
+                        ? config.runtimeVersion : brandingService.recommendedRuntimeVersion();
         String wsUrl = buildWsUrl(publicBaseUrl);
         String provider = ExecutorLaunchOptionsService.resolveProvider(clientKind);
         boolean qoderFamily = ExecutorLaunchOptionsService.isQoderFamily(provider);
 
-        List<String> argv = new ArrayList<>(List.of(
-                "npx", "-y", RuntimeNpmPackage.spec(runtimeVersion), "connect",
-                "--ws-url", wsUrl,
+        List<String> argv = new ArrayList<>(bundled ? BundledExecutorRuntime.commandPrefix()
+                : List.of("npx", "-y", RuntimeNpmPackage.spec(runtimeVersion), "connect"));
+        argv.addAll(List.of("--ws-url", wsUrl,
                 "--token", token,
                 "--executor-id", String.valueOf(executorId),
                 "--provider", provider,

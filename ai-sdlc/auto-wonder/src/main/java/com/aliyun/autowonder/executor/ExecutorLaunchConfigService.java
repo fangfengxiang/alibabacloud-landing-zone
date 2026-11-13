@@ -65,7 +65,7 @@ public class ExecutorLaunchConfigService {
      * page turns into "刷新后重试". The returned VO is what the database now holds.
      *
      * <p>Executors created before client kinds were enforced (client_kind NULL/blank) recover here: the caller must
-     * pick QODER_CLI/QODER_CN_CLI once and the kind is persisted with the config in the same guarded write, so the
+     * pick a creatable client kind once and the kind is persisted with the config in the same guarded write, so the
      * row is command-ready afterwards. An executor that already has a kind never has it changed.
      */
     public ExecutorLaunchConfigVO updateConfig(long id, long tenantId, UpdateExecutorLaunchConfigRequest req,
@@ -154,7 +154,7 @@ public class ExecutorLaunchConfigService {
 
     /**
      * Resolves the client kind a legacy-kindless executor should be recovered with: null means the executor already
-     * has one and this write must not touch it. A kindless executor must pick a creatable Qoder kind in the same
+     * has one and this write must not touch it. A kindless executor must pick a creatable client kind in the same
      * save, because a config saved without a kind still cannot produce a command; a typed executor asked for a
      * different kind is refused instead of silently rewritten.
      */
