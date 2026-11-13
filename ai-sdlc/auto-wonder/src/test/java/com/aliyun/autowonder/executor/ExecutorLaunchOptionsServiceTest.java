@@ -7,6 +7,8 @@ import com.aliyun.autowonder.executor.dto.ProviderModelCatalogVO;
 import com.aliyun.autowonder.executor.dto.SelectOptionVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.Date;
 import java.util.List;
@@ -130,11 +132,11 @@ class ExecutorLaunchOptionsServiceTest {
 
     @Test
     void launchOptionsRejectsClientKindsTheCreateFormHides() {
-        for (String clientKind : new String[]{"CODEX_CLI", "CURSOR_CLI", "QODER_WEB", null, " "}) {
+        for (String clientKind : new String[]{"CURSOR_CLI", "QODER_WEB", null, " "}) {
             BizException ex = assertThrows(BizException.class, () -> service.launchOptions(WORKSPACE, clientKind),
                     String.valueOf(clientKind));
             assertEquals("27003", ex.getCode(), String.valueOf(clientKind));
-            assertTrue(ex.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE"), ex.getMessage());
+            assertTrue(ex.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI"), ex.getMessage());
         }
         verify(modelCatalogService, never()).read(anyLong(), anyString());
     }
@@ -154,21 +156,22 @@ class ExecutorLaunchOptionsServiceTest {
     }
 
     @Test
-    void creatableClientKindsIncludeClaudeCode() {
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE"), ExecutorLaunchOptionsService.creatableClientKindValues());
-        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code"),
+    void creatableClientKindsIncludeLocalCliProviders() {
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI"), ExecutorLaunchOptionsService.creatableClientKindValues());
+        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI"),
                 ExecutorLaunchOptionsService.creatableClientKinds().stream()
                         .map(SelectOptionVO::getLabel).toList());
         assertEquals("国际版 Qoder CLI 执行器",
                 ExecutorLaunchOptionsService.creatableClientKinds().get(0).getDescription());
     }
 
-    @Test
-    void claudeUsesLocalModelSettings() {
-        ExecutorLaunchOptionsVO vo = service.launchOptions(WORKSPACE, "claude_code");
+    @ParameterizedTest
+    @CsvSource({"claude_code, CLAUDE_CODE, claude", "codex_cli, CODEX_CLI, codex"})
+    void launchOptionsUseLocalModelSettings(String requestedKind, String clientKind, String provider) {
+        ExecutorLaunchOptionsVO vo = service.launchOptions(WORKSPACE, requestedKind);
 
-        assertEquals("CLAUDE_CODE", vo.getClientKind());
-        assertEquals("claude", vo.getProvider());
+        assertEquals(clientKind, vo.getClientKind());
+        assertEquals(provider, vo.getProvider());
         assertEquals("platform", vo.getDefaultMemoryMode());
         assertTrue(vo.getModels().isEmpty());
         assertTrue(vo.getReasoningEfforts().isEmpty());

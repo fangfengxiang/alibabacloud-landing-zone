@@ -1673,7 +1673,7 @@ public class McpToolService {
                         + "pre-fills. Values are assembled server-side, so never hardcode them.",
                         schema(required("clientKind"),
                                 enumProp("clientKind", ExecutorLaunchOptionsService.creatableClientKindValues(),
-                                        "Required. Executor client kind. Claude Code uses its local CLI model settings."))),
+                                        "Required. Executor client kind. Claude Code and Codex CLI use their local model settings."))),
                 tool(CREATE_EXECUTOR, "Create an executor for a digital worker and persist its launch config. "
                         + "Administrators also receive the one-time plaintext token; other callers get token=null and "
                         + "ask an administrator to fetch it with autowonder.get_executor_token. Validation and "
@@ -1687,7 +1687,7 @@ public class McpToolService {
                                 prop("agentId", "integer", "Required. Owning digital worker id."),
                                 prop("name", "string", "Required. Executor name, e.g. dev-machine-01."),
                                 enumProp("clientKind", ExecutorLaunchOptionsService.creatableClientKindValues(),
-                                        "Required. Executor client kind. Omit model, reasoningEffort and contextWindow for Claude Code."),
+                                        "Required. Executor client kind. Omit model, reasoningEffort and contextWindow for Claude Code and Codex CLI."),
                                 prop("maxConcurrentDispatches", "integer", "Optional. Integer from 1 to 10. Defaults to 5 on create; omitted updates preserve the current value. Use the new launch command to apply."),
                                 enumProp("memoryMode", ExecutorLaunchOptionsService.memoryModeValues(),
                                         "Optional. Memory mode to persist; defaults to platform, the value the page "
@@ -4920,7 +4920,7 @@ public class McpToolService {
                         "memoryModes", "defaultModel", "defaultCreateModel", "defaultReasoningEffort",
                         "defaultContextWindow", "defaultMemoryMode"),
                 prop("clientKind", "string", "Canonical client kind these options belong to."),
-                prop("provider", "string", "Runtime provider passed as --provider, for example qoder or claude."),
+                prop("provider", "string", "Runtime provider passed as --provider, for example qoder, claude or codex."),
                 arrayProp("models", selectOptionSchema(),
                         "Selectable models: the live provider catalog when a snapshot exists, "
                                 + "otherwise the built-in list the page also falls back to."),

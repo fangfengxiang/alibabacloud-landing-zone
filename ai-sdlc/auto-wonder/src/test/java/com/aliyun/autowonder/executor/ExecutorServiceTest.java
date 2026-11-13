@@ -10,6 +10,8 @@ import com.aliyun.autowonder.websocket.PresenceManager;
 import com.aliyun.autowonder.websocket.SessionRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import javax.websocket.RemoteEndpoint;
 import javax.websocket.Session;
@@ -213,21 +215,22 @@ class ExecutorServiceTest {
         verify(executorDao, never()).insert(any());
     }
 
-    @Test
-    void createsClaudeExecutorWithLocalModelSettings() {
+    @ParameterizedTest
+    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI"})
+    void createsExecutorWithLocalModelSettings(String requestedKind, String clientKind) {
         doAnswer(inv -> { ((ExecutorDO) inv.getArgument(0)).setId(1L); return null; })
                 .when(executorDao).insert(any());
         when(tokenService.issue(1L))
                 .thenReturn(new TokenService.IssuedToken("plain-claude", "sha256:claude"));
         CreateExecutorRequest req = new CreateExecutorRequest();
-        req.setName("claude-runner");
-        req.setClientKind(" claude_code ");
+        req.setName("local-cli-runner");
+        req.setClientKind(" " + requestedKind + " ");
         req.setMemoryMode("provider-local");
 
         IssuedExecutorVO vo = service.create(5L, req, 100L, 7L);
 
-        verify(executorDao).insert(argThat((ExecutorDO e) -> "CLAUDE_CODE".equals(e.getClientKind())));
-        assertEquals("CLAUDE_CODE", vo.getClientKind());
+        verify(executorDao).insert(argThat((ExecutorDO e) -> clientKind.equals(e.getClientKind())));
+        assertEquals(clientKind, vo.getClientKind());
         assertEquals("provider-local", vo.getMemoryMode());
         assertNull(vo.getModel());
     }
@@ -237,7 +240,7 @@ class ExecutorServiceTest {
         // REST 和 MCP 共用可创建类型校验。
         CreateExecutorRequest req = new CreateExecutorRequest();
         req.setName("legacy-cli");
-        req.setClientKind("CODEX_CLI");
+        req.setClientKind("CURSOR_CLI");
         req.setMemoryMode("provider-local");
 
         BizException ex = assertThrows(BizException.class, () -> service.create(5L, req, 100L, 7L));

@@ -8,6 +8,8 @@ import com.aliyun.autowonder.executor.dto.ProviderModelCatalogVO;
 import com.aliyun.autowonder.executor.dto.UpdateExecutorLaunchConfigRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.Date;
@@ -459,14 +461,15 @@ class ExecutorLaunchConfigServiceTest {
                 eq(1), eq(USER));
     }
 
-    @Test
-    void updateConfig_recoversClaudeWithoutQoderModelSettings() {
+    @ParameterizedTest
+    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI"})
+    void updateConfig_recoversLocalCliWithoutQoderModelSettings(String requestedKind, String clientKind) {
         when(executorDao.findById(9L)).thenReturn(executor(9L, null, null, 1));
-        when(executorDao.updateLaunchConfigWithClientKind(eq(9L), eq(TENANT), anyString(), eq("CLAUDE_CODE"),
+        when(executorDao.updateLaunchConfigWithClientKind(eq(9L), eq(TENANT), anyString(), eq(clientKind),
                 eq(1), eq(USER))).thenReturn(1);
 
         ExecutorLaunchConfigVO config = service.updateConfig(9L, TENANT,
-                recoveryReq(" claude_code ", 1, "provider-local", null, null, null), USER);
+                recoveryReq(" " + requestedKind + " ", 1, "provider-local", null, null, null), USER);
 
         assertEquals(2, config.getVersion());
         assertEquals("provider-local", config.getMemoryMode());
@@ -474,7 +477,7 @@ class ExecutorLaunchConfigServiceTest {
         assertNull(config.getReasoningEffort());
         assertNull(config.getContextWindow());
         ArgumentCaptor<String> json = ArgumentCaptor.forClass(String.class);
-        verify(executorDao).updateLaunchConfigWithClientKind(eq(9L), eq(TENANT), json.capture(), eq("CLAUDE_CODE"),
+        verify(executorDao).updateLaunchConfigWithClientKind(eq(9L), eq(TENANT), json.capture(), eq(clientKind),
                 eq(1), eq(USER));
         assertNull(ExecutorLaunchConfigService.parse(json.getValue()).model);
     }
@@ -497,7 +500,7 @@ class ExecutorLaunchConfigServiceTest {
         when(executorDao.findById(9L)).thenReturn(executor(9L, null, null, 1));
 
         BizException ex = assertThrows(BizException.class, () -> service.updateConfig(9L, TENANT,
-                recoveryReq("CODEX_CLI", 1, "platform", "qmodel_38max", "medium", "260000"), USER));
+                recoveryReq("CURSOR_CLI", 1, "platform", "qmodel_38max", "medium", "260000"), USER));
         assertEquals("17009", ex.getCode());
         verify(executorDao, never()).updateLaunchConfig(anyLong(), anyLong(), anyString(), anyInt(), anyLong());
         verify(executorDao, never()).updateLaunchConfigWithClientKind(anyLong(), anyLong(), anyString(), anyString(),

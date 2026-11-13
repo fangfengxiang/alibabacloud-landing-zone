@@ -1,5 +1,6 @@
 {
   "clientClaudeCode": "Claude Code",
+  "clientCodexCli": "Codex CLI",
   "online": "在线",
   "busy": "忙碌",
   "offline": "离线",

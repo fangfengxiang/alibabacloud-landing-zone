@@ -117,7 +117,7 @@ public enum ErrorCode {
     EXECUTOR_LAUNCH_CONFIG_INCOMPLETE("17007", "执行器启动配置不完整，请先保存启动配置后再生成命令"),
     EXECUTOR_LAUNCH_CONFIG_OVERRIDE_REJECTED("17008",
             "启动配置以数据库为准，不支持临时覆盖；请调用 autowonder.update_executor_launch_config 修改后再生成命令"),
-    EXECUTOR_CLIENT_KIND_INVALID("17009", "客户端类型不合法，仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE"),
+    EXECUTOR_CLIENT_KIND_INVALID("17009", "客户端类型不合法，仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI"),
     ARTIFACT_NOT_FOUND("17010", "产物不存在"),
     EXECUTOR_CLIENT_KIND_MISSING("17011", "执行器缺少客户端类型，无法生成启动命令"),
     PACKAGE_BUILD_FAILED("17020", "任务包打包失败"),

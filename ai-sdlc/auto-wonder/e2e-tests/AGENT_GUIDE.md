@@ -117,9 +117,9 @@ configuration with the tested source and repeat the lifecycle normally.
 ./e2e-tests/verify.sh --check --with-runtime --project-root "$(pwd -P)"
 ```
 
-For the bundled Claude Code executor, select
-`AW_E2E_RUNTIME_PROVIDER=claude`.
-Set `AW_E2E_CLAUDE_HOME` to an absolute, dedicated,
+For the bundled Codex and Claude Code executors, select
+`AW_E2E_RUNTIME_PROVIDER=codex` or `AW_E2E_RUNTIME_PROVIDER=claude`.
+Set `AW_E2E_CODEX_HOME` or `AW_E2E_CLAUDE_HOME` to an absolute, dedicated,
 already authenticated CLI directory. Keep credential files in that private
 directory and remove it after the run. These scenarios use the lifecycle Node
 binary to execute the platform-generated command, including its runtime bundle

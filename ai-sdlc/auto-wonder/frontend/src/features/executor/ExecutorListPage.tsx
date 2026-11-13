@@ -47,7 +47,7 @@ type ClientKindOption = {
   value: string;
   color: string;
   Icon: typeof CodeOutlined | typeof RobotHeadIcon;
-} & ({ label: string } | { labelKey: 'clientClaudeCode' });
+} & ({ label: string } | { labelKey: 'clientClaudeCode' | 'clientCodexCli' });
 
 function clientKindLabel(option: ClientKindOption, t: TFunction<'executor'>): string {
   return 'labelKey' in option ? t(option.labelKey) : option.label;
@@ -57,7 +57,7 @@ const CLIENT_KINDS: ClientKindOption[] = [
   { value: 'QODER_CN_CLI', label: 'Qoder CLI CN', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
   { value: 'QODER_CLI', label: 'Qoder CLI', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
   { value: 'CLAUDE_CODE', labelKey: 'clientClaudeCode', color: '#d4380d', Icon: RobotHeadIcon },
-  { value: 'CODEX_CLI', label: 'Codex CLI', color: '#13a8a8', Icon: CodeSandboxOutlined },
+  { value: 'CODEX_CLI', labelKey: 'clientCodexCli', color: '#13a8a8', Icon: CodeSandboxOutlined },
   { value: 'CURSOR_CLI', label: 'Cursor CLI', color: 'var(--aw-text)', Icon: CodeSandboxOutlined },
 ];
 
@@ -73,7 +73,9 @@ export function isClientKindMissing(kind?: string | null): boolean {
 }
 
 // 新建和补录共享可选类型。
-export const CREATABLE_CLIENT_KINDS = CLIENT_KINDS.filter((k) => isQoderClientKind(k.value) || k.value === 'CLAUDE_CODE');
+export const CREATABLE_CLIENT_KINDS = CLIENT_KINDS.filter(({ value }) =>
+  isQoderClientKind(value) || value === 'CLAUDE_CODE' || value === 'CODEX_CLI',
+);
 
 const EXECUTORS_VIEW_STORAGE_KEY = 'autowonder.executors.view';
 const EXECUTORS_VIEW_OPTIONS = ['agent', 'squad'] as const;

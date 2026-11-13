@@ -30,6 +30,7 @@ public class ExecutorLaunchOptionsService {
     public static final String CLIENT_KIND_QODER_CLI = "QODER_CLI";
     public static final String CLIENT_KIND_QODER_CN_CLI = "QODER_CN_CLI";
     public static final String CLIENT_KIND_CLAUDE_CODE = "CLAUDE_CODE";
+    public static final String CLIENT_KIND_CODEX_CLI = "CODEX_CLI";
     public static final String PROVIDER_QODER = "qoder";
     public static final String PROVIDER_QODER_CN = "qodercn";
     public static final String PROVIDER_CLAUDE = "claude";
@@ -56,7 +57,8 @@ public class ExecutorLaunchOptionsService {
     private static final List<SelectOptionVO> CREATABLE_CLIENT_KINDS = List.of(
             new SelectOptionVO(CLIENT_KIND_QODER_CLI, "Qoder CLI", "国际版 Qoder CLI 执行器"),
             new SelectOptionVO(CLIENT_KIND_QODER_CN_CLI, "Qoder CLI CN", "国内版 Qoder CLI 执行器"),
-            new SelectOptionVO(CLIENT_KIND_CLAUDE_CODE, "Claude Code", "Claude Code 执行器"));
+            new SelectOptionVO(CLIENT_KIND_CLAUDE_CODE, "Claude Code", "Claude Code 执行器"),
+            new SelectOptionVO(CLIENT_KIND_CODEX_CLI, "Codex CLI", "Codex CLI 执行器"));
 
     private static final Map<String, String> PROVIDER_BY_CLIENT_KIND;
 
@@ -65,7 +67,7 @@ public class ExecutorLaunchOptionsService {
         providers.put(CLIENT_KIND_QODER_CN_CLI, PROVIDER_QODER_CN);
         providers.put(CLIENT_KIND_QODER_CLI, PROVIDER_QODER);
         providers.put(CLIENT_KIND_CLAUDE_CODE, PROVIDER_CLAUDE);
-        providers.put("CODEX_CLI", PROVIDER_CODEX);
+        providers.put(CLIENT_KIND_CODEX_CLI, PROVIDER_CODEX);
         providers.put("CURSOR_CLI", PROVIDER_CURSOR);
         PROVIDER_BY_CLIENT_KIND = Map.copyOf(providers);
     }

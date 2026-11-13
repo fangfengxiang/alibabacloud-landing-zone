@@ -73,8 +73,8 @@ class ExecutorI18nBoundaryTest {
         boundary(() -> options.resolveReasoningEffort("auto", "ultra"), "27003", 200,
                 "reasoningEffort 仅支持 max/xhigh/high/medium/low/none", "reasoningEffort only supports max/xhigh/high/medium/low/none.");
         for (ErrorCode code : List.of(ErrorCode.EXECUTOR_CLIENT_KIND_INVALID, ErrorCode.MCP_TOOL_ARGUMENT_INVALID)) {
-            boundary(() -> ExecutorLaunchOptionsService.requireCreatableClientKind("CODEX_CLI", code), code.getCode(), 200,
-                    "clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE", "clientKind only supports QODER_CLI/QODER_CN_CLI/CLAUDE_CODE.");
+            boundary(() -> ExecutorLaunchOptionsService.requireCreatableClientKind("CURSOR_CLI", code), code.getCode(), 200,
+                    "clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI", "clientKind only supports QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI.");
         }
     }
 

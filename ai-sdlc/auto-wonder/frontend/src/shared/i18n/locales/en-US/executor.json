@@ -1,5 +1,6 @@
 {
   "clientClaudeCode": "Claude Code",
+  "clientCodexCli": "Codex CLI",
   "online": "Online",
   "busy": "Busy",
   "offline": "Offline",

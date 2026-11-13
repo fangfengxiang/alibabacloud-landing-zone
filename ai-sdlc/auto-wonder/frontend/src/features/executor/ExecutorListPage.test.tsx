@@ -652,7 +652,7 @@ describe('ExecutorListPage', () => {
     expect(screen.getByText('Qoder CLI')).toBeInTheDocument();
     expect(screen.getByText('Qoder CLI CN')).toBeInTheDocument();
     expect(screen.getByText('Claude Code')).toBeInTheDocument();
-    expect(screen.queryByText('Codex CLI')).not.toBeInTheDocument();
+    expect(screen.getByText('Codex CLI')).toBeInTheDocument();
     expect(screen.queryByText('Cursor CLI')).not.toBeInTheDocument();
     expect(screen.getByText('记忆模式')).toBeInTheDocument();
     expect(screen.getByText('Qoder 模型')).toBeInTheDocument();
@@ -743,7 +743,11 @@ describe('ExecutorListPage', () => {
     expect(screen.queryByText('测试工程师（未编队）')).not.toBeInTheDocument();
   });
 
-  it.each(['QODER_CLI', 'CLAUDE_CODE'])('submits the selected agent and %s settings', async (clientKind) => {
+  it.each([
+    ['QODER_CLI', 'Qoder CLI'],
+    ['CLAUDE_CODE', 'Claude Code'],
+    ['CODEX_CLI', 'Codex CLI'],
+  ])('submits the selected agent and %s settings', async (clientKind, label) => {
     const user = userEvent.setup();
     let createdPathname: string | null = null;
     let createBody: Record<string, unknown> | null = null;
@@ -767,15 +771,13 @@ describe('ExecutorListPage', () => {
 
     await user.type(screen.getByPlaceholderText('如: dev-machine-01'), 'runner-01');
     const dialog = screen.getByRole('dialog', { name: '新建执行器' });
-    if (clientKind === 'CLAUDE_CODE') {
-      await user.click(within(dialog).getByRole('button', { name: 'Claude Code' }));
-    }
+    await user.click(within(dialog).getByRole('button', { name: label }));
     await user.click(dialog.querySelector('.ant-modal-footer button.ant-btn-primary')!);
 
     await screen.findByText('执行器创建成功');
     expect(createdPathname).toBe('/api/agents/40170/executors');
     expect(createBody).toMatchObject({ name: 'runner-01', clientKind });
-    if (clientKind === 'CLAUDE_CODE') {
+    if (clientKind !== 'QODER_CLI') {
       expect(createBody).not.toHaveProperty('model');
       expect(createBody).not.toHaveProperty('reasoningEffort');
       expect(createBody).not.toHaveProperty('contextWindow');
@@ -1041,8 +1043,8 @@ describe('ExecutorListPage', () => {
     expect(isClientKindMissing('CLAUDE_CODE')).toBe(false);
   });
 
-  it('offers Claude Code and the two Qoder CLIs for creation', () => {
-    expect(CREATABLE_CLIENT_KINDS.map((kind) => kind.value)).toEqual(['QODER_CN_CLI', 'QODER_CLI', 'CLAUDE_CODE']);
+  it('offers Claude Code, Codex CLI, and both Qoder CLIs for creation', () => {
+    expect(CREATABLE_CLIENT_KINDS.map((kind) => kind.value)).toEqual(['QODER_CN_CLI', 'QODER_CLI', 'CLAUDE_CODE', 'CODEX_CLI']);
   });
 
   it('offers Claude Code in the create modal and displays existing Claude executors', async () => {
@@ -1068,7 +1070,7 @@ describe('ExecutorListPage', () => {
     expect(within(createDialog).getByText('Qoder CLI')).toBeInTheDocument();
     expect(within(createDialog).getByText('Qoder CLI CN')).toBeInTheDocument();
     expect(within(createDialog).getByText('Claude Code')).toBeInTheDocument();
-    expect(within(createDialog).queryByText('Codex CLI')).not.toBeInTheDocument();
+    expect(within(createDialog).getByText('Codex CLI')).toBeInTheDocument();
     expect(within(createDialog).queryByText('Cursor CLI')).not.toBeInTheDocument();
   });
 
@@ -1731,7 +1733,10 @@ describe('ExecutorListPage', () => {
     expect(await screen.findByText('启动命令已复制')).toBeInTheDocument();
   });
 
-  it('recovers a kindless executor with Claude Code and copies its command', async () => {
+  it.each([
+    ['CLAUDE_CODE', 'Claude Code', 'claude'],
+    ['CODEX_CLI', 'Codex CLI', 'codex'],
+  ])('recovers a kindless executor with %s and copies its command', async (clientKind, label, provider) => {
     const user = userEvent.setup();
     const writeText = mockClipboardWrite();
     serveExecutor({ clientKind: null });
@@ -1740,18 +1745,18 @@ describe('ExecutorListPage', () => {
     await expandAgentGroup(user, 'A（未编队）');
     await user.click(await screen.findByRole('button', { name: /启动命令/ }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
-    await selectInForm(user, dialog, '客户端类型', 'Claude Code');
+    await selectInForm(user, dialog, '客户端类型', label);
     expect(within(dialog).queryByText('Qoder 模型')).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: '复制启动命令' }));
 
     expect(await screen.findByText('启动命令已复制')).toBeInTheDocument();
     const [saved] = launchConfigUpdatesFor(10000);
-    expect(saved).toMatchObject({ clientKind: 'CLAUDE_CODE', memoryMode: 'platform', version: 1 });
+    expect(saved).toMatchObject({ clientKind, memoryMode: 'platform', version: 1 });
     expect(saved).not.toHaveProperty('model');
     expect(saved).not.toHaveProperty('reasoningEffort');
     expect(saved).not.toHaveProperty('contextWindow');
     expect(writeText).toHaveBeenCalledTimes(1);
-    expect(writeText.mock.calls[0][0]).toMatch(/--provider claude /);
+    expect(writeText.mock.calls[0][0]).toContain(`--provider ${provider} `);
     expect(writeText.mock.calls[0][0]).not.toContain('--model');
   });
 

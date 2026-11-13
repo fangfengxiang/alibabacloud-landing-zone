@@ -20,7 +20,8 @@ final class BundledExecutorRuntime {
     }
 
     static boolean supports(String clientKind) {
-        return ExecutorLaunchOptionsService.CLIENT_KIND_CLAUDE_CODE.equals(clientKind);
+        return ExecutorLaunchOptionsService.CLIENT_KIND_CLAUDE_CODE.equals(clientKind)
+                || ExecutorLaunchOptionsService.CLIENT_KIND_CODEX_CLI.equals(clientKind);
     }
 
     static ClassPathResource module(String name) {

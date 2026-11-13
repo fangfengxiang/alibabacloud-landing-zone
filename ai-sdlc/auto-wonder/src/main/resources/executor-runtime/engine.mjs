@@ -20,6 +20,7 @@ const CLAUDE_ENV = [
   'CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS',
   'CLAUDE_CODE_GZIP_REQUEST_BODIES', 'CLAUDE_CODE_CERT_STORE', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
 ];
+const CODEX_ENV = ['CODEX_HOME', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'AZURE_OPENAI_API_KEY'];
 
 function copyEnv(names, source, target) {
   for (const name of names) {
@@ -50,6 +51,19 @@ async function claudeCommand(env, memoryMode) {
   return { binary: 'claude', args, readSummary: claudeSummary };
 }
 
+function codexCommand(env, memoryMode) {
+  copyEnv(CODEX_ENV, process.env, env);
+  const args = [
+    '--ask-for-approval', 'never', 'exec', '--sandbox', 'workspace-write', '--skip-git-repo-check',
+    '--json', '--color', 'never',
+    '-c', 'sandbox_workspace_write.network_access=false',
+    '-c', 'shell_environment_policy.exclude=["*TOKEN*","*KEY*","*SECRET*","*PASSWORD*","*CREDENTIAL*"]',
+  ];
+  if (memoryMode !== 'provider-local') args.push('--ephemeral');
+  args.push('-');
+  return { binary: 'codex', args, readSummary: codexSummary };
+}
+
 function claudeSummary(output) {
   const result = JSON.parse(output);
   if (result.type !== 'result' || result.subtype !== 'success' || result.is_error !== false
@@ -57,6 +71,20 @@ function claudeSummary(output) {
     throw new Error('CLAUDE_TURN_FAILED');
   }
   return result.result;
+}
+
+function codexSummary(output) {
+  let completed = false;
+  let summary;
+  for (const line of output.trim().split('\n')) {
+    const event = JSON.parse(line);
+    if (event.type === 'turn.failed') throw new Error('CODEX_TURN_FAILED');
+    if (event.type === 'turn.completed') completed = true;
+    if (event.type === 'item.completed' && event.item?.type === 'agent_message'
+        && typeof event.item.text === 'string') summary = event.item.text;
+  }
+  if (!completed || summary === undefined) throw new Error('CODEX_TURN_FAILED');
+  return summary;
 }
 
 function taskPrompt(capsule, memoryMode) {
@@ -142,6 +170,9 @@ export async function runEngine(provider, capsule, directory, { memoryMode }, si
   switch (provider) {
     case 'claude':
       command = await claudeCommand(env, memoryMode);
+      break;
+    case 'codex':
+      command = codexCommand(env, memoryMode);
       break;
     default:
       throw new Error('EXECUTOR_PROVIDER_UNSUPPORTED');

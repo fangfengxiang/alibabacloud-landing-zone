@@ -122,7 +122,7 @@ def step_request(instruction):
             "timeoutSeconds": 300, "retryBudget": 0}
 
 
-RUNTIME_CLIENT_KINDS = {"qoder": "QODER_CLI", "claude": "CLAUDE_CODE"}
+RUNTIME_CLIENT_KINDS = {"qoder": "QODER_CLI", "codex": "CODEX_CLI", "claude": "CLAUDE_CODE"}
 CLAUDE_GATEWAY_ENV = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
                       "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
                       "ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
@@ -242,7 +242,9 @@ class OwnedRuntime:
         env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG",
                "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY") if k in os.environ}
         provider = self.connection_env.get("AUTOWONDER_PROVIDER")
-        if provider == "claude":
+        if provider == "codex":
+            env["CODEX_HOME"] = os.environ["AW_E2E_CODEX_HOME"]
+        elif provider == "claude":
             if claude_gateway_configured():
                 env.update({key: os.environ[key] for key in CLAUDE_GATEWAY_ENV if key in os.environ})
                 claude_home = Path(root) / "claude"
@@ -545,8 +547,8 @@ def require_provider_cli(provider):
     if (not cli_home.is_absolute() or not cli_home.is_dir()
             or cli_home.resolve() == (Path.home() / f".{provider}").resolve()):
         raise CheckFailure(f"{label}_TEST_HOME_REQUIRED")
-    home_key = "CLAUDE_CONFIG_DIR"
-    auth_command = "auth"
+    home_key = "CODEX_HOME" if provider == "codex" else "CLAUDE_CONFIG_DIR"
+    auth_command = "login" if provider == "codex" else "auth"
     try:
         result = subprocess.run([binary, auth_command, "status"],
             env={"PATH": os.environ.get("PATH", ""), "HOME": str(Path.home()), home_key: configured_home},
