@@ -16,6 +16,9 @@ import com.aliyun.autowonder.debuglog.DebugLogService;
 import com.aliyun.autowonder.evolution.EvolutionTelemetryEvidenceLiteService;
 import com.aliyun.autowonder.evolution.EvolutionTrialAssignmentLiteService;
 import com.aliyun.autowonder.executor.ExecutorRegistry;
+import com.aliyun.autowonder.executor.ExecutorDao;
+import com.aliyun.autowonder.executor.ExecutorDO;
+import com.aliyun.autowonder.executor.ExecutorLaunchOptionsService;
 import com.aliyun.autowonder.environment.EnvironmentSnapshotResolutionException;
 import com.aliyun.autowonder.util.MojibakeDetector;
 import com.aliyun.autowonder.redis.RedisManager;
@@ -78,6 +81,7 @@ public class DispatchService {
     private final DispatchCheckpointService checkpointService;
     private final AuditLogService auditLogService;
     private final ExecutorRegistry executorRegistry;
+    private ExecutorDao executorDao;
     private TransactionTemplate tx;
     private final EvolutionTelemetryEvidenceLiteService telemetryEvidenceService;
 	private final EvolutionTrialAssignmentLiteService trialAssignmentService;
@@ -130,6 +134,11 @@ public class DispatchService {
     @Autowired
     public void setEnvironmentVariableRefDao(AgentEnvironmentVariableRefDao dao) {
         this.environmentVariableRefDao = dao;
+    }
+
+    @Autowired(required = false)
+    public void setExecutorDao(ExecutorDao dao) {
+        this.executorDao = dao;
     }
 
     private static final Set<String> EXECUTOR_FAILURE_CATEGORIES = Set.of(
@@ -911,6 +920,13 @@ public class DispatchService {
                     resolution.diagnostic());
         }
         DispatchDO target = resolution.target();
+        if (isInteractionDispatch(target) && executorDao != null) {
+            ExecutorDO executor = target.getExecutorId() == null ? null : executorDao.findById(target.getExecutorId());
+            if (executor != null && !ExecutorLaunchOptionsService.supportsInteractionResume(executor.getClientKind())) {
+                throw BizException.keyed(ErrorCode.CONFLICT, "dispatch.recovery.executor_resume_unsupported",
+                        new Object[0], "此执行器不支持恢复评论交互会话；请改用 Qoder 执行器，或创建新的交付");
+            }
+        }
         if (workflowSnapshots != null) {
             if (workflowSnapshots.fenced(target)) throw DispatchWorkflowSnapshotStore.superseded();
             workflowSnapshots.require(target);

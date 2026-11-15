@@ -163,6 +163,11 @@ public class ExecutorLaunchOptionsService {
         return PROVIDER_QODER.equals(provider) || PROVIDER_QODER_CN.equals(provider);
     }
 
+    /** Qoder runtimes can resume interaction sessions; bundled CLI adapters currently cannot. */
+    public static boolean supportsInteractionResume(String clientKind) {
+        return CLIENT_KIND_QODER_CLI.equals(clientKind) || CLIENT_KIND_QODER_CN_CLI.equals(clientKind);
+    }
+
     /** Returns the canonical client kind, or null when the page would not offer it. */
     public static String canonicalClientKind(String clientKind) {
         if (clientKind == null) {

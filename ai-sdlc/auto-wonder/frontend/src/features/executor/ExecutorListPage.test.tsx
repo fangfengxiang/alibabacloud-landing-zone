@@ -1068,6 +1068,37 @@ describe('ExecutorListPage', () => {
   });
 
   it.each([
+    ['Claude Code', 'Claude 模型', 'sonnet', 'claude-sonnet-5-5'],
+    ['Codex CLI', 'Codex 模型', 'sol', 'gpt-6.1-sol'],
+  ])('adapts the %s model field to a preset combobox', async (client, modelLabel, typed, preset) => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /新建执行器/ }));
+    const dialog = screen.getByRole('dialog', { name: '新建执行器' });
+    await user.click(within(dialog).getByRole('button', { name: client }));
+    const model = within(dialog).getByRole('combobox', { name: modelLabel });
+    await user.click(model);
+    fireEvent.change(model, { target: { value: typed } });
+    expect(await screen.findByRole('option', { name: preset })).toBeInTheDocument();
+    expect(within(dialog).getByText('推理强度', { selector: 'label' })).toBeInTheDocument();
+  });
+
+  it('keeps the OpenCode model field a free input without a reasoning effort', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /新建执行器/ }));
+    const dialog = screen.getByRole('dialog', { name: '新建执行器' });
+    await user.click(within(dialog).getByRole('button', { name: 'OpenCode' }));
+    const model = within(dialog).getByRole('textbox', { name: 'OpenCode 模型' });
+    expect(model).toHaveAttribute('placeholder', '例如 bailian/glm-5.3#delivery');
+    expect(within(dialog).getByText(/百炼 GLM-5\.3：bailian\/glm-5\.3#delivery/)).toBeInTheDocument();
+    expect(within(dialog).queryByText('推理强度')).not.toBeInTheDocument();
+    fireEvent.change(model,
+      { target: { value: 'bailian/glm-5.3#delivery' } });
+    expect(model).toHaveValue('bailian/glm-5.3#delivery');
+  });
+
+  it.each([
     ['CLAUDE_CODE', 'Claude Code'],
     ['OPENCODE_CLI', 'OpenCode'],
   ])('offers %s in the create modal and displays existing executors', async (clientKind, label) => {
@@ -1334,7 +1365,7 @@ describe('ExecutorListPage', () => {
     await expandAgentGroup(user, 'A（未编队）');
     await user.click(screen.getByRole('button', { name: '启动命令' }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
-    const model = within(dialog).getByRole('textbox', { name: 'CLI 模型' });
+    const model = within(dialog).getByRole('combobox', { name: 'Codex 模型' });
     await waitFor(() => expect(model).toHaveValue('initial-model'));
     fireEvent.change(model, { target: { value: 'configured-model' } });
     await selectInForm(user, dialog, '推理强度', 'minimal');
@@ -2715,10 +2746,10 @@ describe('ExecutorListPage', () => {
     await user.click(await screen.findByRole('button', { name: /启动命令/ }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
 
-    // 回填服务端记忆模式，保留可选的 CLI 模型和推理强度。
+    // 回填服务端记忆模式，保留可选的 Claude 模型和推理强度。
     await waitFor(() => expect(previewedCommand(dialog)).toContain('--memory-mode provider-local'));
     expect(within(dialog).queryByText('Qoder 模型')).not.toBeInTheDocument();
-    expect(within(dialog).getByRole('textbox', { name: 'CLI 模型' })).toHaveValue('');
+    expect(within(dialog).getByRole('combobox', { name: 'Claude 模型' })).toHaveValue('');
     expect(within(dialog).getByText('推理强度', { selector: 'label' })).toBeInTheDocument();
     expect(within(dialog).queryByText('上下文窗口')).not.toBeInTheDocument();
 

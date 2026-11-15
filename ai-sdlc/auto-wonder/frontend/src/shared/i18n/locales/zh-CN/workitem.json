@@ -656,6 +656,7 @@
       "notCancelling": "当前没有待确认的结束请求",
       "interactionNoPause": "评论交互执行不支持暂停",
       "interactionBusy": "该数字员工正在处理评论交互，请稍后再试",
+      "executorResumeUnsupported": "此执行器不支持恢复评论会话。请改用 Qoder 执行器，或创建新的交付。",
       "newer": "该数字员工有更新的执行（#{{0}}，步骤 {{1}}），请对最新执行操作",
       "running": "当前执行仍在运行",
       "online": "执行仍在线，不能继续",

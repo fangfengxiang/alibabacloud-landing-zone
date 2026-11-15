@@ -22,6 +22,7 @@ import com.aliyun.autowonder.dispatch.ExecutionAvailabilityService;
 import com.aliyun.autowonder.dispatch.WorkitemAssignedEvent;
 import com.aliyun.autowonder.executor.ExecutorDO;
 import com.aliyun.autowonder.executor.ExecutorDao;
+import com.aliyun.autowonder.executor.ExecutorLaunchOptionsService;
 import com.aliyun.autowonder.context.AutoWonderContext;
 import com.aliyun.autowonder.filter.BizLoggerFilter;
 import com.aliyun.autowonder.guidance.GuidanceDO;
@@ -2590,6 +2591,7 @@ public class WorkitemService {
         private final Map<Long, String> names = new HashMap<>();
         private final Map<Long, String> executorNames = new HashMap<>();
         private final Map<Long, Boolean> executorOnline = new HashMap<>();
+        private final Map<Long, String> executorClientKinds = new HashMap<>();
         private final Map<Long, List<SdlcStepDO>> stepsBySdlc = new HashMap<>();
         private final Map<Long, SdlcStepDO> stepsById = new HashMap<>();
         private List<DispatchDO> allDispatches = List.of();
@@ -2627,6 +2629,14 @@ public class WorkitemService {
 
         private boolean executorOffline(Long id) {
             return id == null || !executorOnline.computeIfAbsent(id, presenceManager::isExecutorOnline);
+        }
+
+        private String executorClientKind(Long id) {
+            if (id == null) return null;
+            return executorClientKinds.computeIfAbsent(id, key -> {
+                ExecutorDO executor = executorDao.findById(key);
+                return executor == null ? null : executor.getClientKind();
+            });
         }
 
         private String agentName(Long id) {
@@ -2775,6 +2785,11 @@ public class WorkitemService {
             capabilities.setResume(ControlActionCapabilityVO.denied("delivery.controlReason.online"));
             return capabilities;
         }
+        if (DispatchService.isInteractionDispatchValue(target)
+                && !ExecutorLaunchOptionsService.supportsInteractionResume(context.executorClientKind(target.getExecutorId()))) {
+            capabilities.setResume(ControlActionCapabilityVO.denied("delivery.controlReason.executorResumeUnsupported"));
+            return capabilities;
+        }
         ControlActionCapabilityVO resume = ControlActionCapabilityVO.allowed();
         resume.setTargetDispatchId(target.getId());
         resume.setMode(DispatchStatus.PAUSED.equals(target.getStatus()) ? "RESUME" : "RETRY");
@@ -2789,6 +2804,7 @@ public class WorkitemService {
     private ControlActionCapabilityVO resumeDenied(String errorKey, Object[] args) {
         String reason = switch (errorKey) {
             case "dispatch.recovery.interaction" -> "delivery.controlReason.interactionBusy";
+            case "dispatch.recovery.executor_resume_unsupported" -> "delivery.controlReason.executorResumeUnsupported";
             case "dispatch.recovery.newer" -> "delivery.controlReason.newer";
             case "dispatch.recovery.latest" -> "delivery.controlReason.notLatest";
             default -> "delivery.controlReason.notResumable";

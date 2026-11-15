@@ -92,4 +92,23 @@ describe('resolveExecutionActions', () => {
       { action: 'resume', reasonKey: 'delivery.controlReason.newer', reasonArgs: ['58', '301'] },
     ]);
   });
+
+  it('surfaces the reason an interaction session cannot be resumed by this executor', () => {
+    const resolved = resolveExecutionActions(attempt({
+      status: 'FAILED',
+      resumeMode: 'SIDE_INTERACTION',
+      control: {
+        pause: { allowed: false },
+        end: { allowed: false },
+        forceEnd: { allowed: false },
+        resume: { allowed: false, reasonKey: 'delivery.controlReason.executorResumeUnsupported' },
+      },
+    }));
+    expect(resolved.primary).toBeNull();
+    expect(resolved.disabled).toEqual([
+      { action: 'resume', reasonKey: 'delivery.controlReason.executorResumeUnsupported', reasonArgs: [] },
+    ]);
+    expect(i18n.t('workitem:delivery.controlReason.executorResumeUnsupported'))
+      .toContain('Qoder');
+  });
 });

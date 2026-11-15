@@ -4,6 +4,9 @@ import com.aliyun.autowonder.agent.AgentDao;
 import com.aliyun.autowonder.agent.AgentVersionDao;
 import com.aliyun.autowonder.common.error.BizException;
 import com.aliyun.autowonder.common.error.ErrorCode;
+import com.aliyun.autowonder.executor.ExecutorDO;
+import com.aliyun.autowonder.executor.ExecutorDao;
+import com.aliyun.autowonder.executor.ExecutorLaunchOptionsService;
 import com.aliyun.autowonder.redis.RedisManager;
 import com.aliyun.autowonder.taskpackage.TaskPackager;
 import com.aliyun.autowonder.workitem.WorkitemDO;
@@ -119,6 +122,31 @@ class DispatchServiceRecoveryTest {
         verify(dispatchDao).updateStatus(eq(55L), eq(100L), eq(DispatchStatus.CANCELED),
                 any(), any(), any(), any(), eq(DispatchFailureReason.MANUAL_CONTINUE),
                 eq(0), anyLong());
+    }
+
+    @Test
+    void bundledExecutorCannotRetryAnInteractionSession() {
+        DispatchDO source = dispatch(55L, DispatchStatus.FAILED, 1);
+        source.setExecutorId(77L);
+        source.setResumeMode("SIDE_INTERACTION");
+        when(dispatchDao.findById(55L)).thenReturn(source);
+        when(dispatchDao.findByIdempotencyKey(100L, "continue:55")).thenReturn(null);
+        when(dispatchDao.listByWorkitem(100L, 200L)).thenReturn(List.of(source));
+        ExecutorDao executors = mock(ExecutorDao.class);
+        ExecutorDO executor = new ExecutorDO();
+        executor.setId(77L);
+        executor.setClientKind(ExecutorLaunchOptionsService.CLIENT_KIND_OPENCODE_CLI);
+        when(executors.findById(77L)).thenReturn(executor);
+        service.setExecutorDao(executors);
+
+        BizException failure = assertThrows(BizException.class,
+                () -> service.continueDispatch(100L, 200L, 55L, 9L));
+
+        assertEquals("dispatch.recovery.executor_resume_unsupported", failure.getMessageKey());
+        verify(dispatchDao, never()).updateStatus(anyLong(), anyLong(), anyString(),
+                any(), any(), any(), any(), any(), anyInt(), anyLong());
+        verify(dispatchDao, never()).insert(any());
+        verify(service, never()).runPending(anyLong());
     }
 
     @Test

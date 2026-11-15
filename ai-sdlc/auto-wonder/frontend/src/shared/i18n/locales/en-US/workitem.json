@@ -666,6 +666,7 @@
       "notCancelling": "There is no pending end request.",
       "interactionNoPause": "Comment interaction executions cannot be paused.",
       "interactionBusy": "This agent is processing a comment interaction. Try again later.",
+      "executorResumeUnsupported": "This executor cannot resume comment sessions. Use a Qoder executor or create a new delivery.",
       "newer": "This agent has a newer execution (#{{0}}, step {{1}}). Operate on the latest execution.",
       "running": "The execution is still running.",
       "online": "The execution is still online and cannot continue.",

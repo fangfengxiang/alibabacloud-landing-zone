@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { PageHeading } from '@/shared/ui/PageHeading';
 import { RobotHeadIcon } from '@/shared/ui/RobotHeadIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, Tag, Badge, Button, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, Alert, Typography, Dropdown, Tooltip, Segmented, Collapse, Drawer, Descriptions } from 'antd';
+import { Card, Tag, Badge, Button, Space, Modal, Form, Input, InputNumber, Select, AutoComplete, message, Popconfirm, Alert, Typography, Dropdown, Tooltip, Segmented, Collapse, Drawer, Descriptions } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
 import { PlusOutlined, DeleteOutlined, CopyOutlined, CheckCircleFilled, CloseCircleFilled, InfoCircleFilled, CodeOutlined, EyeOutlined, EyeInvisibleOutlined, CodeSandboxOutlined, DownOutlined, BugOutlined, TeamOutlined, CloudUploadOutlined, LinkOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -84,6 +84,32 @@ const CLI_REASONING_EFFORTS: Readonly<Record<string, readonly string[]>> = {
   CODEX_CLI: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
 };
 
+// 仅 OpenCode 用纯输入框（模型 ID 由执行机的 provider 配置决定，格式 provider/model#variant）；
+// Claude Code / Codex CLI 用「预置常用模型 + 可自定义输入」的组合框，网关自定义模型仍可直接输入。
+const CLI_MODEL_PRESETS: Readonly<Record<string, readonly string[]>> = {
+  CLAUDE_CODE: ['sonnet', 'opus', 'fable', 'haiku',
+    'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2', 'claude-haiku-5-5'],
+  CODEX_CLI: ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6.1-terra', 'gpt-6-luna'],
+};
+
+function cliModelLabelKey(kind: string): 'cliModelClaude' | 'cliModelCodex' | 'cliModelOpenCode' {
+  if (kind === 'CLAUDE_CODE') return 'cliModelClaude';
+  if (kind === 'CODEX_CLI') return 'cliModelCodex';
+  return 'cliModelOpenCode';
+}
+
+function cliModelHelpKey(kind: string): 'cliModelHelpClaude' | 'cliModelHelpCodex' | 'cliModelHelpOpenCode' {
+  if (kind === 'CLAUDE_CODE') return 'cliModelHelpClaude';
+  if (kind === 'CODEX_CLI') return 'cliModelHelpCodex';
+  return 'cliModelHelpOpenCode';
+}
+
+function cliModelPlaceholderKey(kind: string): 'cliModelPlaceholderClaude' | 'cliModelPlaceholderCodex' | 'cliModelPlaceholderOpenCode' {
+  if (kind === 'CLAUDE_CODE') return 'cliModelPlaceholderClaude';
+  if (kind === 'CODEX_CLI') return 'cliModelPlaceholderCodex';
+  return 'cliModelPlaceholderOpenCode';
+}
+
 function isBundledClientKind(kind?: string | null): boolean {
   return kind === 'CLAUDE_CODE' || kind === 'CODEX_CLI' || kind === 'OPENCODE_CLI';
 }
@@ -106,10 +132,22 @@ function LocalCliModelFields({ kind }: { kind?: string | null }) {
   const { t } = useTranslation('executor');
   if (!isBundledClientKind(kind)) return null;
   const efforts = CLI_REASONING_EFFORTS[kind ?? ''] ?? [];
+  const presets = CLI_MODEL_PRESETS[kind ?? ''] ?? [];
+  const placeholder = t(cliModelPlaceholderKey(kind ?? ''));
+  const control = presets.length > 0 ? (
+    <AutoComplete
+      options={presets.map((model) => ({ value: model }))}
+      filterOption={(input, option) => (option?.value ?? '').toString().toLowerCase()
+        .includes(input.trim().toLowerCase())}
+      allowClear placeholder={placeholder} maxLength={200} />
+  ) : (
+    <Input placeholder={placeholder} maxLength={200} />
+  );
   return (
     <>
-      <Form.Item label={t('cliModel')} name="cliModel" extra={t('cliModelHelp')} preserve={false}>
-        <Input maxLength={200} />
+      <Form.Item label={t(cliModelLabelKey(kind ?? ''))} name="cliModel"
+        extra={t(cliModelHelpKey(kind ?? ''))} preserve={false}>
+        {control}
       </Form.Item>
       {efforts.length > 0 && (
         <Form.Item label={t('reasoning')} name="cliReasoningEffort" preserve={false}>
