@@ -1,13 +1,13 @@
 # Runtime Usage — AutoWonder 客户端运行时使用指南
 
-AutoWonder 客户端运行时(Runtime)是部署在执行机上的本地执行端,负责连接 AutoWonder 服务端、接收 dispatch 任务并在本机驱动 AI Agent。Qoder 系列通过 npm 包分发，Claude Code、Codex CLI 和 OpenCode 使用平台随版本发布的运行时。本文覆盖命令清单、常见用法、以及典型场景问题与现象(QA)。
+AutoWonder 客户端运行时(Runtime)是部署在执行机上的本地执行端,负责连接 AutoWonder 服务端、接收 dispatch 任务并在本机驱动 AI Agent。Qoder 系列通过 npm 包分发，Claude Code、Codex CLI、OpenCode 和 CodeBuddy Code 使用平台随版本发布的运行时。本文覆盖命令清单、常见用法、以及典型场景问题与现象(QA)。
 
 ## 1. 环境要求
 
 | 项 | 要求 |
 |---|---|
 | Node.js | 平台内置运行时需要 22 或更新版本，Qoder 系列 npm 运行时需要 20 或更新版本 |
-| Agent CLI | 在执行机安装执行器类型对应的 CLI，即 `claude`、`codex`、`opencode`、`qodercli` 或 Qoder CN 对应的 CLI |
+| Agent CLI | 在执行机安装执行器类型对应的 CLI，即 `claude`、`codex`、`opencode`、`codebuddy`（npm 包 `@tencent-ai/codebuddy-code`）或 `qodercli` / Qoder CN 对应的 CLI |
 | 网络 | 可访问服务端 WebSocket 端点(`--ws-url`) |
 
 ## 2. npm 运行时命令清单
@@ -31,7 +31,7 @@ npx -y autowonder connect --ws-url wss://autowonder.example.com/ws/executor \
 
 ### 使用平台内置运行时
 
-在执行机安装 Node.js 22 或更新版本，并配置 Claude Code、Codex CLI 或 OpenCode 的认证。Claude Code 可以使用本机配置的 Anthropic 兼容网关。OpenCode 需要 2.2.3 或更新版本，使用独立的非交互会话，允许任务目录中的文件读写和搜索。执行器选择器的问号提示展示推荐的实测 CLI 版本。
+在执行机安装 Node.js 22 或更新版本，并配置 Claude Code、Codex CLI、OpenCode 或 CodeBuddy Code 的认证。Claude Code 可以使用本机配置的 Anthropic 兼容网关。OpenCode 需要 2.2.3 或更新版本，使用独立的非交互会话，允许任务目录中的文件读写和搜索。CodeBuddy Code 通过 `codebuddy` 登录态或 `CODEBUDDY_AUTH_TOKEN` 环境变量认证，使用 `--print` 非交互会话。执行器选择器的问号提示展示推荐的实测 CLI 版本。
 
 在平台创建对应类型的执行器，复制并运行页面生成的启动命令。命令会从当前平台下载执行器模块并校验 SHA-256，然后连接调度器。普通工单的进度、终态和交付物通过平台回传。
 
@@ -44,6 +44,7 @@ npx -y autowonder connect --ws-url wss://autowonder.example.com/ws/executor \
 | Claude Code | 映射到 `claude --model`，使用 Claude 模型标识或网关提供的模型标识 | 映射到 `--effort`，可选 `low`、`medium`、`high`、`xhigh`、`max`，实际档位由模型和网关决定 |
 | Codex CLI | 映射到 `codex exec --model` | 映射到 `model_reasoning_effort`，可选 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`，实际档位由模型决定 |
 | OpenCode | 映射到 `opencode run --model`，使用 `provider/model` 或 `provider/model#variant` | 用模型标识中的 `#variant` 选择 OpenCode 原生变体，启动命令无独立推理力度参数 |
+| CodeBuddy Code | 映射到 `codebuddy --model`，使用登录账号可用的模型 ID（如 `glm-5.3`、`hy3`） | 映射到 `--effort`，可选 `minimal`、`low`、`medium`、`high`、`xhigh`、`max`，实际档位由模型决定 |
 
 内置运行时的 `--max-tasks` 范围为 1–10，默认 5。`--workspace-root` 也可通过环境变量 `AUTOWONDER_WORKSPACE_ROOT` 设置，默认使用 `~/.autowonder/local-executor/<executor-id>`。每次派发使用独立的任务目录。`--name` 设置平台连接名称，`--debug` 输出连接与任务错误码。模型上下文窗口及网关认证由 CLI 自身配置。完整参数对照、能力边界与实测版本见 [执行器验收与海外版 Qoder 对照](executor-runtime-acceptance.md)。
 

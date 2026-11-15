@@ -93,6 +93,7 @@ const MOCK_PROVIDERS: Record<string, string> = {
   CLAUDE_CODE: 'claude',
   CODEX_CLI: 'codex',
   OPENCODE_CLI: 'opencode',
+  CODEBUDDY_CLI: 'codebuddy',
   CURSOR_CLI: 'cursor',
 };
 
@@ -115,7 +116,7 @@ function isQoderProvider(provider: string): boolean {
 }
 
 function isBundledProvider(provider: string): boolean {
-  return provider === 'claude' || provider === 'codex' || provider === 'opencode';
+  return provider === 'claude' || provider === 'codex' || provider === 'opencode' || provider === 'codebuddy';
 }
 
 type LaunchCommandBody = {

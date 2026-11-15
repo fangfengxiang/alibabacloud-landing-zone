@@ -140,6 +140,14 @@ running the check. A Bailian config can use environment substitution for
 The preflight requires OpenCode 2.2.3 or later on PATH. The dispatch scenario
 checks model access by completing an assignment and downloading its artifact.
 
+For CodeBuddy Code, select `AW_E2E_RUNTIME_PROVIDER=codebuddy`. The preflight
+requires `codebuddy` (npm package `@tencent-ai/codebuddy-code`, 2.100.0 or
+later) on PATH and an injected `CODEBUDDY_AUTH_TOKEN` or `CODEBUDDY_API_KEY`
+environment variable; the token is only passed through to the executor process
+and is never printed. `AW_E2E_EXECUTOR_MODEL` accepts a model ID from the
+account catalog, for example `glm-5.3`, and `AW_E2E_EXECUTOR_REASONING_EFFORT`
+accepts `minimal` through `max` (no `none`).
+
 For any bundled provider, optionally set `AW_E2E_EXECUTOR_MODEL` to a model
 available through its configured credentials. For OpenCode use `provider/model`
 or `provider/model#variant` when selecting a configured model variant.

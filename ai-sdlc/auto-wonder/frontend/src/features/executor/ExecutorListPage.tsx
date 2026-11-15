@@ -48,7 +48,7 @@ type ClientKindOption = {
   color: string;
   Icon: typeof CodeOutlined | typeof RobotHeadIcon;
   testedVersion?: string;
-} & ({ label: string } | { labelKey: 'clientClaudeCode' | 'clientCodexCli' | 'clientOpenCode' });
+} & ({ label: string } | { labelKey: 'clientClaudeCode' | 'clientCodexCli' | 'clientOpenCode' | 'clientCodeBuddy' });
 
 function clientKindLabel(option: ClientKindOption, t: TFunction<'executor'>): string {
   return 'labelKey' in option ? t(option.labelKey) : option.label;
@@ -60,6 +60,7 @@ const CLIENT_KINDS: ClientKindOption[] = [
   { value: 'CLAUDE_CODE', labelKey: 'clientClaudeCode', testedVersion: '2.1.311', color: '#d4380d', Icon: RobotHeadIcon },
   { value: 'CODEX_CLI', labelKey: 'clientCodexCli', testedVersion: '0.167.0-alpha.4.1', color: '#13a8a8', Icon: CodeSandboxOutlined },
   { value: 'OPENCODE_CLI', labelKey: 'clientOpenCode', testedVersion: '2.2.7', color: 'var(--aw-text)', Icon: CodeOutlined },
+  { value: 'CODEBUDDY_CLI', labelKey: 'clientCodeBuddy', testedVersion: '2.184.0', color: '#1677ff', Icon: CodeOutlined },
   { value: 'CURSOR_CLI', label: 'Cursor CLI', color: 'var(--aw-text)', Icon: CodeSandboxOutlined },
 ];
 
@@ -76,42 +77,59 @@ export function isClientKindMissing(kind?: string | null): boolean {
 
 // 新建和补录共享可选类型。
 export const CREATABLE_CLIENT_KINDS = CLIENT_KINDS.filter(({ value }) =>
-  isQoderClientKind(value) || value === 'CLAUDE_CODE' || value === 'CODEX_CLI' || value === 'OPENCODE_CLI',
+  isQoderClientKind(value) || value === 'CLAUDE_CODE' || value === 'CODEX_CLI' || value === 'OPENCODE_CLI'
+  || value === 'CODEBUDDY_CLI',
 );
 
 const CLI_REASONING_EFFORTS: Readonly<Record<string, readonly string[]>> = {
   CLAUDE_CODE: ['low', 'medium', 'high', 'xhigh', 'max'],
   CODEX_CLI: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+  // CodeBuddy Code --effort 枚举（2.184.0 --help 实测）：minimal..max。
+  CODEBUDDY_CLI: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
 };
 
 // 仅 OpenCode 用纯输入框（模型 ID 由执行机的 provider 配置决定，格式 provider/model#variant）；
-// Claude Code / Codex CLI 用「预置常用模型 + 可自定义输入」的组合框，网关自定义模型仍可直接输入。
+// Claude Code / Codex CLI / CodeBuddy Code 用「预置常用模型 + 可自定义输入」的组合框，网关自定义模型仍可直接输入。
 const CLI_MODEL_PRESETS: Readonly<Record<string, readonly string[]>> = {
   CLAUDE_CODE: ['sonnet', 'opus', 'fable', 'haiku',
     'claude-sonnet-5-5', 'claude-opus-5-5', 'claude-fable-5-2', 'claude-haiku-5-5'],
   CODEX_CLI: ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6.1-terra', 'gpt-6-luna'],
+  // 取自 CodeBuddy Code 2.184.0 --help 的 --model 支持清单。
+  CODEBUDDY_CLI: ['hy3', 'hy4-preview', 'glm-5.3', 'glm-5.3-flash', 'glm-5.2', 'kimi-k3', 'kimi-k2.6',
+    'deepseek-v4.1-flash', 'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gemini-3.5-flash',
+    'auto', 'fast-model', 'balanced-model', 'primary-model', 'deep-model'],
 };
 
-function cliModelLabelKey(kind: string): 'cliModelClaude' | 'cliModelCodex' | 'cliModelOpenCode' {
+type CliModelKey = 'cliModelClaude' | 'cliModelCodex' | 'cliModelOpenCode' | 'cliModelCodeBuddy';
+
+function cliModelLabelKey(kind: string): CliModelKey {
   if (kind === 'CLAUDE_CODE') return 'cliModelClaude';
   if (kind === 'CODEX_CLI') return 'cliModelCodex';
+  if (kind === 'CODEBUDDY_CLI') return 'cliModelCodeBuddy';
   return 'cliModelOpenCode';
 }
 
-function cliModelHelpKey(kind: string): 'cliModelHelpClaude' | 'cliModelHelpCodex' | 'cliModelHelpOpenCode' {
+type CliModelHelpKey = 'cliModelHelpClaude' | 'cliModelHelpCodex' | 'cliModelHelpOpenCode' | 'cliModelHelpCodeBuddy';
+
+function cliModelHelpKey(kind: string): CliModelHelpKey {
   if (kind === 'CLAUDE_CODE') return 'cliModelHelpClaude';
   if (kind === 'CODEX_CLI') return 'cliModelHelpCodex';
+  if (kind === 'CODEBUDDY_CLI') return 'cliModelHelpCodeBuddy';
   return 'cliModelHelpOpenCode';
 }
 
-function cliModelPlaceholderKey(kind: string): 'cliModelPlaceholderClaude' | 'cliModelPlaceholderCodex' | 'cliModelPlaceholderOpenCode' {
+type CliModelPlaceholderKey =
+  'cliModelPlaceholderClaude' | 'cliModelPlaceholderCodex' | 'cliModelPlaceholderOpenCode' | 'cliModelPlaceholderCodeBuddy';
+
+function cliModelPlaceholderKey(kind: string): CliModelPlaceholderKey {
   if (kind === 'CLAUDE_CODE') return 'cliModelPlaceholderClaude';
   if (kind === 'CODEX_CLI') return 'cliModelPlaceholderCodex';
+  if (kind === 'CODEBUDDY_CLI') return 'cliModelPlaceholderCodeBuddy';
   return 'cliModelPlaceholderOpenCode';
 }
 
 function isBundledClientKind(kind?: string | null): boolean {
-  return kind === 'CLAUDE_CODE' || kind === 'CODEX_CLI' || kind === 'OPENCODE_CLI';
+  return kind === 'CLAUDE_CODE' || kind === 'CODEX_CLI' || kind === 'OPENCODE_CLI' || kind === 'CODEBUDDY_CLI';
 }
 
 function localCliLaunchFields(kind: string | null | undefined, values: {

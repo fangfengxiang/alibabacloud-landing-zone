@@ -27,7 +27,8 @@ final class BundledExecutorRuntime {
     static boolean supports(String clientKind) {
         return ExecutorLaunchOptionsService.CLIENT_KIND_CLAUDE_CODE.equals(clientKind)
                 || ExecutorLaunchOptionsService.CLIENT_KIND_CODEX_CLI.equals(clientKind)
-                || ExecutorLaunchOptionsService.CLIENT_KIND_OPENCODE_CLI.equals(clientKind);
+                || ExecutorLaunchOptionsService.CLIENT_KIND_OPENCODE_CLI.equals(clientKind)
+                || ExecutorLaunchOptionsService.CLIENT_KIND_CODEBUDDY_CLI.equals(clientKind);
     }
 
     static ClassPathResource module(String name) {
@@ -48,6 +49,9 @@ final class BundledExecutorRuntime {
         return switch (provider) {
             case ExecutorLaunchOptionsService.PROVIDER_CLAUDE -> List.of("low", "medium", "high", "xhigh", "max");
             case ExecutorLaunchOptionsService.PROVIDER_CODEX -> List.of("none", "minimal", "low", "medium", "high", "xhigh");
+            // CodeBuddy Code 的 --effort 枚举：minimal, low, medium, high, xhigh, max（2.184.0 --help 实测）。
+            case ExecutorLaunchOptionsService.PROVIDER_CODEBUDDY ->
+                    List.of("minimal", "low", "medium", "high", "xhigh", "max");
             default -> List.of();
         };
     }

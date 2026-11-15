@@ -123,8 +123,10 @@ def step_request(instruction):
 
 
 RUNTIME_CLIENT_KINDS = {"qoder": "QODER_CLI", "codex": "CODEX_CLI", "claude": "CLAUDE_CODE",
-                        "opencode": "OPENCODE_CLI"}
+                        "opencode": "OPENCODE_CLI", "codebuddy": "CODEBUDDY_CLI"}
 OPENCODE_MIN_VERSION = (2, 2, 3)
+CODEBUDDY_MIN_VERSION = (2, 100, 0)
+CODEBUDDY_ENV = ("CODEBUDDY_AUTH_TOKEN", "CODEBUDDY_API_KEY")
 CLAUDE_GATEWAY_ENV = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
                       "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
                       "ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
@@ -287,6 +289,11 @@ class OwnedRuntime:
             except BaseException:
                 self.directory.cleanup()
                 raise
+        elif provider == "codebuddy":
+            # CodeBuddy Code 认证走登录态文件或环境令牌；检查环境只透传已注入的令牌。
+            for name in CODEBUDDY_ENV:
+                if os.environ.get(name, "").strip():
+                    env[name] = os.environ[name]
         elif "QODER_PERSONAL_ACCESS_TOKEN" in os.environ:
             env["QODER_PERSONAL_ACCESS_TOKEN"] = os.environ["QODER_PERSONAL_ACCESS_TOKEN"]
         env.update(self.connection_env)
@@ -611,6 +618,21 @@ def require_provider_cli(provider):
                     raise CheckFailure("OPENCODE_VERSION_UNSUPPORTED")
         except (OSError, subprocess.TimeoutExpired):
             raise CheckFailure("OPENCODE_CLI_VERSION_INVALID") from None
+        return
+    if provider == "codebuddy":
+        try:
+            version = subprocess.run([binary, "--version"], cwd=None,
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                text=True, timeout=30)
+            match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", version.stdout.strip())
+            if version.returncode or not match:
+                raise CheckFailure("CODEBUDDY_CLI_VERSION_INVALID")
+            if tuple(map(int, match.groups())) < CODEBUDDY_MIN_VERSION:
+                raise CheckFailure("CODEBUDDY_VERSION_UNSUPPORTED")
+        except (OSError, subprocess.TimeoutExpired):
+            raise CheckFailure("CODEBUDDY_CLI_VERSION_INVALID") from None
+        if not any(os.environ.get(name, "").strip() for name in CODEBUDDY_ENV):
+            raise CheckFailure("CODEBUDDY_AUTH_TOKEN_REQUIRED")
         return
     if provider == "claude" and claude_gateway_configured():
         return

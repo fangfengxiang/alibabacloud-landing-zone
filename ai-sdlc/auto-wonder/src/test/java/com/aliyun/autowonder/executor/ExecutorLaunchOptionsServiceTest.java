@@ -157,8 +157,8 @@ class ExecutorLaunchOptionsServiceTest {
 
     @Test
     void creatableClientKindsIncludeLocalCliProviders() {
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"), ExecutorLaunchOptionsService.creatableClientKindValues());
-        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI", "OpenCode"),
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI", "CODEBUDDY_CLI"), ExecutorLaunchOptionsService.creatableClientKindValues());
+        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI", "OpenCode", "CodeBuddy Code"),
                 ExecutorLaunchOptionsService.creatableClientKinds().stream()
                         .map(SelectOptionVO::getLabel).toList());
         assertEquals("国际版 Qoder CLI 执行器",
@@ -166,7 +166,8 @@ class ExecutorLaunchOptionsServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"claude_code, CLAUDE_CODE, claude", "codex_cli, CODEX_CLI, codex", "opencode_cli, OPENCODE_CLI, opencode"})
+    @CsvSource({"claude_code, CLAUDE_CODE, claude", "codex_cli, CODEX_CLI, codex", "opencode_cli, OPENCODE_CLI, opencode",
+            "codebuddy_cli, CODEBUDDY_CLI, codebuddy"})
     void launchOptionsUseLocalModelSettings(String requestedKind, String clientKind, String provider) {
         ExecutorLaunchOptionsVO vo = service.launchOptions(WORKSPACE, requestedKind);
 
@@ -177,6 +178,7 @@ class ExecutorLaunchOptionsServiceTest {
         assertEquals(switch (provider) {
             case "claude" -> List.of("low", "medium", "high", "xhigh", "max");
             case "codex" -> List.of("none", "minimal", "low", "medium", "high", "xhigh");
+            case "codebuddy" -> List.of("minimal", "low", "medium", "high", "xhigh", "max");
             default -> List.of();
         }, values(vo.getReasoningEfforts()));
         assertTrue(vo.getContextWindows().isEmpty());

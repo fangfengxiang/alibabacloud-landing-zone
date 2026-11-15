@@ -749,6 +749,7 @@ describe('ExecutorListPage', () => {
     ['CLAUDE_CODE', 'Claude Code'],
     ['CODEX_CLI', 'Codex CLI'],
     ['OPENCODE_CLI', 'OpenCode'],
+    ['CODEBUDDY_CLI', 'CodeBuddy Code'],
   ])('submits the selected agent and %s settings', async (clientKind, label) => {
     const user = userEvent.setup();
     let createdPathname: string | null = null;
@@ -1050,6 +1051,7 @@ describe('ExecutorListPage', () => {
     ['Claude Code', '2.1.311'],
     ['Codex CLI', '0.167.0-alpha.4.1'],
     ['OpenCode', '2.2.7'],
+    ['CodeBuddy Code', '2.184.0'],
   ])('shows the tested %s version without changing the selected executor', async (client, version) => {
     const user = userEvent.setup();
     renderPage();
@@ -1061,15 +1063,16 @@ describe('ExecutorListPage', () => {
     expect(within(dialog).getByRole('button', { name: client })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('offers both Qoder CLIs, Claude Code, Codex CLI, and OpenCode for creation', () => {
+  it('offers both Qoder CLIs, Claude Code, Codex CLI, OpenCode, and CodeBuddy Code for creation', () => {
     expect(CREATABLE_CLIENT_KINDS.map((kind) => kind.value)).toEqual([
-      'QODER_CN_CLI', 'QODER_CLI', 'CLAUDE_CODE', 'CODEX_CLI', 'OPENCODE_CLI',
+      'QODER_CN_CLI', 'QODER_CLI', 'CLAUDE_CODE', 'CODEX_CLI', 'OPENCODE_CLI', 'CODEBUDDY_CLI',
     ]);
   });
 
   it.each([
     ['Claude Code', 'Claude 模型', 'sonnet', 'claude-sonnet-5-5'],
     ['Codex CLI', 'Codex 模型', 'sol', 'gpt-6.1-sol'],
+    ['CodeBuddy Code', 'CodeBuddy 模型', 'glm', 'glm-5.3'],
   ])('adapts the %s model field to a preset combobox', async (client, modelLabel, typed, preset) => {
     const user = userEvent.setup();
     renderPage();
@@ -1101,6 +1104,7 @@ describe('ExecutorListPage', () => {
   it.each([
     ['CLAUDE_CODE', 'Claude Code'],
     ['OPENCODE_CLI', 'OpenCode'],
+    ['CODEBUDDY_CLI', 'CodeBuddy Code'],
   ])('offers %s in the create modal and displays existing executors', async (clientKind, label) => {
     const user = userEvent.setup();
     server.use(
@@ -1126,6 +1130,7 @@ describe('ExecutorListPage', () => {
     expect(within(createDialog).getByText('Claude Code')).toBeInTheDocument();
     expect(within(createDialog).getByText('Codex CLI')).toBeInTheDocument();
     expect(within(createDialog).getByText('OpenCode')).toBeInTheDocument();
+    expect(within(createDialog).getByText('CodeBuddy Code')).toBeInTheDocument();
     expect(within(createDialog).queryByText('Cursor CLI')).not.toBeInTheDocument();
   });
 
@@ -1832,6 +1837,7 @@ describe('ExecutorListPage', () => {
     ['CLAUDE_CODE', 'Claude Code', 'claude'],
     ['CODEX_CLI', 'Codex CLI', 'codex'],
     ['OPENCODE_CLI', 'OpenCode', 'opencode'],
+    ['CODEBUDDY_CLI', 'CodeBuddy Code', 'codebuddy'],
   ])('recovers a kindless executor with %s and copies its command', async (clientKind, label, provider) => {
     const user = userEvent.setup();
     const writeText = mockClipboardWrite();

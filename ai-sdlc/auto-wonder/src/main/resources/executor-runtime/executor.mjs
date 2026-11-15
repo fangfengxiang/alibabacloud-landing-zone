@@ -12,7 +12,7 @@ const CONNECT_TIMEOUT_MS = 15000;
 const TASK_TIMEOUT_MS = 15 * 60 * 1000;
 const FRAME_LIMIT = 1024 * 1024;
 const PROTOCOL_FEATURES = ['TASK_PACKAGE_SIGNATURE_V1', 'TASK_MODEL_SELECTION_V1'];
-const providers = new Set(['claude', 'codex', 'opencode']);
+const providers = new Set(['claude', 'codex', 'opencode', 'codebuddy']);
 const memoryModes = new Set(['platform', 'provider-local', 'none']);
 const id = (value) => Number.isSafeInteger(value) && value > 0;
 

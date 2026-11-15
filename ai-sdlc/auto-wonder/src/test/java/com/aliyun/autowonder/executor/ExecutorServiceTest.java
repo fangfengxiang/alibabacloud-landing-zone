@@ -216,7 +216,7 @@ class ExecutorServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI", "opencode_cli, OPENCODE_CLI"})
+    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI", "opencode_cli, OPENCODE_CLI", "codebuddy_cli, CODEBUDDY_CLI"})
     void createsExecutorWithLocalModelSettings(String requestedKind, String clientKind) {
         doAnswer(inv -> { ((ExecutorDO) inv.getArgument(0)).setId(1L); return null; })
                 .when(executorDao).insert(any());

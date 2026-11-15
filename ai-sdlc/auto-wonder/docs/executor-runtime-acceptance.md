@@ -1,5 +1,15 @@
 # 执行器验收与海外版 Qoder 对照
 
+## 2026-11-15 新增 CodeBuddy Code 执行器
+
+按 Claude Code / Codex CLI / OpenCode 的既有模式新增腾讯 CodeBuddy Code 执行器：客户端类型 `CODEBUDDY_CLI → provider codebuddy`，走平台内置运行时，认证由执行机的 `codebuddy` 登录态或 `CODEBUDDY_AUTH_TOKEN`/`CODEBUDDY_API_KEY` 环境变量提供。CLI 命令映射为 `codebuddy --print --output-format json --permission-mode acceptEdits --tools Read,Write,Edit,Glob,Grep`（+ 按记忆模式的 `--no-session-persistence`、`--model`、`--effort`）；`--print` 的 JSON 结果结构与 Claude Code 同构，复用同一结果解析与脱敏逻辑。`--effort` 枚举为 minimal、low、medium、high、xhigh、max（无 none）；模型 ID 使用登录账号可用值（如 `glm-5.3`、`hy3`、`kimi-k3`），标准模型 ID 格式校验，界面提供预置组合框并可自定义。未登录时 CLI 以退出码 0、空 stdout 结束，运行时将其归因为 `CODEBUDDY_AUTH_REQUIRED` 而非输出解析失败。
+
+| 终端 | 实测版本 | 验证方式 | 真实派发 |
+| --- | --- | --- | --- |
+| CodeBuddy Code | `2.184.0` | npm 官方包本地安装实测：`--version`、`--help` 全量参数面（`--print/--output-format/--permission-mode/--tools/--model/--effort/--no-session-persistence`）、无认证运行返回明确「Authentication required」 | 本轮缺少腾讯账号 Token，未执行端到端派发；验收脚本已支持 `AW_E2E_RUNTIME_PROVIDER=codebuddy`（预检 CLI 版本 ≥ 2.100.0 并要求注入令牌） |
+
+本轮生命周期 `aw-e2e-14aaadbffa-5799fd3a`（`14aaadb` 加 CodeBuddy 候选源码）Maven `clean verify` 全量通过，`--check` 标准门禁 PASS；前端全量测试 4,411 项通过、1 跳过（执行器专项 252 项含 9 项新增 CodeBuddy 用例）；Python 验收脚本 45 项通过。真实平台上核验了 CodeBuddy 执行器的创建、模型 `glm-5.3` 与推理强度 `low` 的持久化回读、启动命令生成（含 `--model glm-5.3 --reasoning-effort low`、provider `codebuddy`）与 `--context-window` 的显式拒绝。引擎直连实测：未登录时报 `CODEBUDDY_AUTH_REQUIRED`，非法力度/模型 ID 分别报 `EXECUTOR_EFFORT_UNSUPPORTED`/`EXECUTOR_MODEL_INVALID`。
+
 ## 2026-11-15 本轮复核与真实派发重跑
 
 Community Docker 生命周期 `aw-e2e-3aa8ea9211-debe55e7` 从 `3aa8ea9` 加本次参数复核与文档修订的候选构建。Maven `clean verify` 通过，Java 测试 8,897 项，0 失败、0 错误、1 跳过；前端全量测试 4,402 项通过、1 跳过，国际化检查通过。`verify.sh --check` 标准门禁（健康、鉴权链、JSON 协议回归、日志归因）全部 PASS。本机环境需要 JDK 21（Homebrew mvn 默认指向更高版本 JDK 时编译失败）与 docker-java API 版本兼容设置（`~/.docker-java.properties` 的 `api.version`），见下文「本地点验」。
@@ -47,25 +57,25 @@ Community Docker 生命周期 `aw-e2e-3aa8ea9211-2f80a94c` 从 `3aa8ea9` 加本�
 
 对照基准是海外版 `QODER_CLI → qoder`。入口是页面或 MCP 的持久化配置与命令生成，CLI 认证和模型目录由执行机负责。
 
-| 启动参数 | 海外版 Qoder | Claude Code | Codex CLI | OpenCode |
-| --- | --- | --- | --- | --- |
-| `--ws-url`、`--token`、`--executor-id`、`--provider` | npm connect 认证及路由 | 同一 WebSocket 认证与归属 | 同左 | 同左 |
-| `--max-tasks` | 平台默认 5，配置范围 1–10，npm 直调默认 10 | 同一平台范围与默认值，限制接单容量 | 同左 | 同左 |
-| `--workspace-root` | 支持环境变量与 `~/`，含仓库工作区 | 支持显式路径、环境变量及 `~/`，每次派发使用独立临时目录 | 同左 | 同左 |
-| `--name` | daemon 标识，可影响本地进程管理 | 平台连接名称，派发归属仍使用 executor ID | 同左 | 同左 |
-| `--memory-mode` | `platform`、`none`；npm 文档记载 `provider-local` 可解析但任务执行失败 | `platform` 解包平台记忆，`none` 跳过记忆文件，`provider-local` 保留本机新会话 | 同一模式，临时会话使用 `--ephemeral` | 同一模式，临时会话使用内存数据库 |
-| `--model` | 通过 Qoder 实时目录验证并传入 | 可选，映射到 `--model` | 可选，映射到 `--model` | 可选，映射到 `--model`，使用 `provider/model` 或 `provider/model#variant` |
-| `--reasoning-effort` | 按 Qoder 模型目录约束 | 映射到 `--effort`，支持 low、medium、high、xhigh、max，网关可进一步限制 | 映射到 `model_reasoning_effort`，支持 none、minimal、low、medium、high、xhigh，取决于模型 | 在模型 ID 中使用 `#variant`，支持的变体由 OpenCode 模型目录决定 |
-| `--context-window` | 由 Qoder 模型窗口枚举控制 | 不支持：平台保存时拒绝该参数（`executor.command.context_unsupported`），窗口由 CLI 与模型配置管理 | 不支持：同左 | 不支持：同左，由 provider 的模型限制管理 |
-| `--token-aware-enable` | Qoder Token 代理采集 token 用量 | 不支持 Token 代理与用量采集，直接使用本机 CLI 或网关认证；在线命令编辑同样拒绝该参数 | 不支持：同左 | 不支持：同左，使用本机 CLI 或 provider 认证 |
-| `--settings` | npm CLI 的 Claude 专用参数，传入本机 Claude settings 文件 | 不作为启动参数暴露；内置运行时固定读取执行机 `CLAUDE_CONFIG_DIR`（默认 `~/.claude`）下的 `settings.json`（含模型回退），语义上覆盖该能力 | 不适用 | 不适用 |
-| `--QODER_PERSONAL_ACCESS_TOKEN` / `--QODERCN_PERSONAL_ACCESS_TOKEN` | npm CLI 接受内联个人令牌，认证由执行机注入 | 不适用；执行器连接只用平台 `--token`，CLI 认证由执行机环境与登录目录负责 | 不适用 | 不适用 |
-| `--debug` | npm daemon 诊断输出 | 连接和脱敏错误码 | 同左 | 同左 |
-| runtime 版本、重启及升级 | npm 稳定版本固定及受能力协商控制的远程操作 | 平台发布的模块内容标识，更新后重新复制命令在执行机启动；不支持在线固定 npm 版本（`executor.command.bundled_version_managed`） | 同左 | 同左 |
+| 启动参数 | 海外版 Qoder | Claude Code | Codex CLI | OpenCode | CodeBuddy Code |
+| --- | --- | --- | --- | --- | --- |
+| `--ws-url`、`--token`、`--executor-id`、`--provider` | npm connect 认证及路由 | 同一 WebSocket 认证与归属 | 同左 | 同左 | 同左 |
+| `--max-tasks` | 平台默认 5，配置范围 1–10，npm 直调默认 10 | 同一平台范围与默认值，限制接单容量 | 同左 | 同左 | 同左 |
+| `--workspace-root` | 支持环境变量与 `~/`，含仓库工作区 | 支持显式路径、环境变量及 `~/`，每次派发使用独立临时目录 | 同左 | 同左 | 同左 |
+| `--name` | daemon 标识，可影响本地进程管理 | 平台连接名称，派发归属仍使用 executor ID | 同左 | 同左 | 同左 |
+| `--memory-mode` | `platform`、`none`；npm 文档记载 `provider-local` 可解析但任务执行失败 | `platform` 解包平台记忆，`none` 跳过记忆文件，`provider-local` 保留本机新会话 | 同一模式，临时会话使用 `--ephemeral` | 同一模式，临时会话使用内存数据库 | 同一模式，临时会话使用 `--no-session-persistence` |
+| `--model` | 通过 Qoder 实时目录验证并传入 | 可选，映射到 `--model` | 可选，映射到 `--model` | 可选，映射到 `--model`，使用 `provider/model` 或 `provider/model#variant` | 可选，映射到 `--model`，使用登录账号可用的模型 ID（如 `glm-5.3`、`hy3`） |
+| `--reasoning-effort` | 按 Qoder 模型目录约束 | 映射到 `--effort`，支持 low、medium、high、xhigh、max，网关可进一步限制 | 映射到 `model_reasoning_effort`，支持 none、minimal、low、medium、high、xhigh，取决于模型 | 在模型 ID 中使用 `#variant`，支持的变体由 OpenCode 模型目录决定 | 映射到 `--effort`，支持 minimal、low、medium、high、xhigh、max，实际档位由模型决定 |
+| `--context-window` | 由 Qoder 模型窗口枚举控制 | 不支持：平台保存时拒绝该参数（`executor.command.context_unsupported`），窗口由 CLI 与模型配置管理 | 不支持：同左 | 不支持：同左，由 provider 的模型限制管理 | 不支持：同左 |
+| `--token-aware-enable` | Qoder Token 代理采集 token 用量 | 不支持 Token 代理与用量采集，直接使用本机 CLI 或网关认证；在线命令编辑同样拒绝该参数 | 不支持：同左 | 不支持：同左，使用本机 CLI 或 provider 认证 | 不支持：同左，使用登录态或 `CODEBUDDY_AUTH_TOKEN` 环境变量 |
+| `--settings` | npm CLI 的 Claude 专用参数，传入本机 Claude settings 文件 | 不作为启动参数暴露；内置运行时固定读取执行机 `CLAUDE_CONFIG_DIR`（默认 `~/.claude`）下的 `settings.json`（含模型回退），语义上覆盖该能力 | 不适用 | 不适用 | 不适用 |
+| `--QODER_PERSONAL_ACCESS_TOKEN` / `--QODERCN_PERSONAL_ACCESS_TOKEN` | npm CLI 接受内联个人令牌，认证由执行机注入 | 不适用；执行器连接只用平台 `--token`，CLI 认证由执行机环境与登录目录负责 | 不适用 | 不适用 | 不适用 |
+| `--debug` | npm daemon 诊断输出 | 连接和脱敏错误码 | 同左 | 同左 | 同左 |
+| runtime 版本、重启及升级 | npm 稳定版本固定及受能力协商控制的远程操作 | 平台发布的模块内容标识，更新后重新复制命令在执行机启动；不支持在线固定 npm 版本（`executor.command.bundled_version_managed`） | 同左 | 同左 | 同左 |
 
 普通工单由同一调度器冻结任务、校验运行时能力、生成签名任务包。内置运行时校验下载字节与文件摘要、在隔离目录执行 CLI、提交产物，再向平台发送终态并处理确认。模型优先级是派发策略选中的模型、保存的启动模型、CLI 默认模型。
 
-三种内置 CLI 的普通工单范围包括状态和交付物。仓库自动检出、任务环境变量绑定、阻塞 Hook、任务级 MCP、对话、检查点续跑、在线升级、跨进程重启的结果重放，以及 Qoder 的显式产物清单和交付门禁尚未覆盖。本机记忆模式保留新 CLI 会话文件，平台不会把后续派发绑定到旧会话。对评论 `SIDE_INTERACTION` / `CANONICAL_INTERACTION` 会话，进度接口会按执行器类型关闭不支持恢复的 CLI 重试动作，后端也会拒绝直接调用恢复接口；界面提示改用 Qoder 或创建新交付，避免重复生成必然失败的派发。
+内置 CLI（Claude Code、Codex CLI、OpenCode、CodeBuddy Code）的普通工单范围包括状态和交付物。仓库自动检出、任务环境变量绑定、阻塞 Hook、任务级 MCP、对话、检查点续跑、在线升级、跨进程重启的结果重放，以及 Qoder 的显式产物清单和交付门禁尚未覆盖。本机记忆模式保留新 CLI 会话文件，平台不会把后续派发绑定到旧会话。对评论 `SIDE_INTERACTION` / `CANONICAL_INTERACTION` 会话，进度接口会按执行器类型关闭不支持恢复的 CLI 重试动作，后端也会拒绝直接调用恢复接口；界面提示改用 Qoder 或创建新交付，避免重复生成必然失败的派发。
 
 ## 业务与数据流复核
 
@@ -76,7 +86,7 @@ Community Docker 生命周期 `aw-e2e-3aa8ea9211-2f80a94c` 从 `3aa8ea9` 加本�
 | 任务执行 | 接收、确认与进度事件 | 每次派发创建独立目录，由 CLI 适配层设置原生参数、读取输出并处理终止。 |
 | 交付与终态 | 派发产物上传接口、`TASK_RESULT` 和确认 | 上传任务产物后提交成功终态，平台校验归属并保存。产物回传异常会进入失败终态。 |
 
-代码入口为 `ExecutorLaunchConfigService`、`ExecutorLaunchCommandService`、`ExecutorLaunchCommandParser`、`WsDispatchTransport` 和 `src/main/resources/executor-runtime/{executor,engine,capsule}.mjs`。Qoder 源码对照使用 npm 包中的 `bin/cli.js` 与 `README.md`。OpenCode 参数依据 2.2.7 的 `opencode run --help` 和 [OpenCode CLI 模型文档](https://opencode.ai/docs/models)。
+代码入口为 `ExecutorLaunchConfigService`、`ExecutorLaunchCommandService`、`ExecutorLaunchCommandParser`、`WsDispatchTransport` 和 `src/main/resources/executor-runtime/{executor,engine,capsule}.mjs`。Qoder 源码对照使用 npm 包中的 `bin/cli.js` 与 `README.md`。OpenCode 参数依据 2.2.7 的 `opencode run --help` 和 [OpenCode CLI 模型文档](https://opencode.ai/docs/models)。CodeBuddy Code 参数依据 `@tencent-ai/codebuddy-code@2.184.0` 的 `codebuddy --help` 与 `--print` 非交互输出结构实测。
 
 ## 本地点验
 

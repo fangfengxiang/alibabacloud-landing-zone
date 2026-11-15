@@ -28,12 +28,15 @@ const OPENCODE_MIN_VERSION = [2, 2, 3];
 const OPENCODE_FILE_ACTIONS = ['read', 'edit', 'glob', 'grep'];
 const OPENCODE_DISABLED_INTEGRATIONS = ['plugin.use', 'mcp.use', 'skill.use'];
 const CODEX_ENV = ['CODEX_HOME', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'AZURE_OPENAI_API_KEY'];
+const CODEBUDDY_ENV = ['CODEBUDDY_AUTH_TOKEN', 'CODEBUDDY_API_KEY'];
 const MAX_MODEL_ID_LENGTH = 200;
 const MODEL_ID = /^[A-Za-z0-9_.:/+][A-Za-z0-9_.:/+-]*$/;
 const OPENCODE_MODEL_ID = /^[A-Za-z0-9_.:/+][A-Za-z0-9_.:/+-]*(?:#[A-Za-z0-9_.+-]+)?$/;
 const REASONING_EFFORTS = new Map([
   ['claude', ['low', 'medium', 'high', 'xhigh', 'max']],
   ['codex', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']],
+  // CodeBuddy Code --effort 枚举（2.184.0 --help 实测）：minimal..max，无 none。
+  ['codebuddy', ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']],
 ]);
 
 export function validateModelOptions(provider, model, reasoningEffort) {
@@ -89,6 +92,27 @@ function codexCommand(env, memoryMode, model, reasoningEffort) {
   if (reasoningEffort) args.push('-c', 'model_reasoning_effort=' + JSON.stringify(reasoningEffort));
   args.push('-');
   return { binary: 'codex', args, readSummary: codexSummary };
+}
+
+// CodeBuddy Code 的 --print --output-format json 与 Claude Code 同构
+// （{type:"result",subtype:"success",is_error,result}），复用同一结果解析。
+function codebuddyCommand(env, memoryMode, model, reasoningEffort) {
+  copyEnv(CODEBUDDY_ENV, process.env, env);
+  const args = [
+    '--print', '--output-format', 'json',
+    '--permission-mode', 'acceptEdits', '--tools', 'Read,Write,Edit,Glob,Grep',
+  ];
+  if (memoryMode !== 'provider-local') args.push('--no-session-persistence');
+  if (model) args.push('--model', model);
+  if (reasoningEffort) args.push('--effort', reasoningEffort);
+  return { binary: 'codebuddy', args, readSummary: codebuddySummary };
+}
+
+// 未认证时 CodeBuddy 以退出码 0 结束、提示只写 stderr、stdout 为空；
+// 空输出直接归因为执行机未登录，而不是误导性的输出解析失败。
+function codebuddySummary(output) {
+  if (!output.trim()) throw new Error('CODEBUDDY_AUTH_REQUIRED');
+  return claudeSummary(output);
 }
 
 function opencodeCommand(env, memoryMode, directory, model) {
@@ -235,6 +259,9 @@ export async function runEngine(provider, capsule, directory, { memoryMode, mode
       break;
     case 'codex':
       command = codexCommand(env, memoryMode, model, reasoningEffort);
+      break;
+    case 'codebuddy':
+      command = codebuddyCommand(env, memoryMode, model, reasoningEffort);
       break;
     case 'opencode': {
       command = opencodeCommand(env, memoryMode, directory, model);

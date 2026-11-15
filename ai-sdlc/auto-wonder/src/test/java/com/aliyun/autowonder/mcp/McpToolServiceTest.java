@@ -5594,7 +5594,7 @@ class McpToolServiceTest {
         assertEquals(List.of("workspaceId", "agentId", "name", "clientKind"),
                 schemaFor("autowonder.create_executor").get("required"));
 
-        List<String> clientKinds = List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI");
+        List<String> clientKinds = List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI", "CODEBUDDY_CLI");
         assertEquals(clientKinds, enumValues("autowonder.create_executor", "clientKind"));
         assertEquals(clientKinds, enumValues("autowonder.get_executor_launch_options", "clientKind"));
         // 历史缺类型执行器的恢复入口与创建入口共用同一套可创建类型枚举
@@ -5856,9 +5856,9 @@ class McpToolServiceTest {
         List<SelectOptionVO> kinds =
                 (List<SelectOptionVO>) call(principal, "autowonder.list_executor_client_kinds", Map.of());
 
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"),
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI", "CODEBUDDY_CLI"),
                 kinds.stream().map(SelectOptionVO::getValue).toList());
-        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI", "OpenCode"),
+        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI", "OpenCode", "CodeBuddy Code"),
                 kinds.stream().map(SelectOptionVO::getLabel).toList());
         verifyNoInteractions(executorService);
     }
@@ -5895,7 +5895,7 @@ class McpToolServiceTest {
                 "autowonder.get_executor_launch_options", Map.of("clientKind", "CURSOR_CLI")));
 
         assertEquals("27003", exception.getCode());
-        assertTrue(exception.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI/OPENCODE_CLI"));
+        assertTrue(exception.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI/OPENCODE_CLI/CODEBUDDY_CLI"));
         verifyNoInteractions(providerModelCatalogService);
     }
 
@@ -5932,7 +5932,7 @@ class McpToolServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"})
+    @CsvSource({"CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI", "CODEBUDDY_CLI"})
     void createsLocalCliExecutorWithNullableModelFieldsInThePublishedSchema(String clientKind) {
         McpAccessTokenService.Principal admin = principal(WorkspaceAccessLevel.ADMIN);
         when(executorService.create(eq(5L), any(CreateExecutorRequest.class), eq(WORKSPACE_ID), eq(USER_ID)))
@@ -6368,7 +6368,7 @@ class McpToolServiceTest {
 
         List<SelectOptionVO> kinds =
                 (List<SelectOptionVO>) call(admin, "autowonder.list_executor_client_kinds", Map.of());
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"),
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI", "CODEBUDDY_CLI"),
                 kinds.stream().map(SelectOptionVO::getValue).toList());
     }
 

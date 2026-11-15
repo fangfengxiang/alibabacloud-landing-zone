@@ -188,7 +188,8 @@ class ExecutorLaunchConfigServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CLAUDE_CODE, glm-5.3, high", "CODEX_CLI, gpt-5.4, xhigh", "OPENCODE_CLI, bailian/glm-5.3#high,"})
+    @CsvSource({"CLAUDE_CODE, glm-5.3, high", "CODEX_CLI, gpt-5.4, xhigh", "OPENCODE_CLI, bailian/glm-5.3#high,",
+            "CODEBUDDY_CLI, glm-5.3, minimal"})
     void bundledLaunchConfigPersistsOptionalNativeSettings(String kind, String model, String effort) {
         ExecutorDO row = executor(9L, kind, "{\"memoryMode\":\"none\"}", 1);
         when(executorDao.findById(9L)).thenReturn(row);
@@ -324,7 +325,7 @@ class ExecutorLaunchConfigServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"})
+    @CsvSource({"CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI", "CODEBUDDY_CLI"})
     void readStoredConfig_preserves_legacy_memory_only_config_for_a_bundled_executor(String clientKind) {
         when(executorDao.findById(9L)).thenReturn(executor(9L, clientKind,
                 "{\"memoryMode\":\"provider-local\"}", 2));
@@ -489,7 +490,7 @@ class ExecutorLaunchConfigServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI", "opencode_cli, OPENCODE_CLI"})
+    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI", "opencode_cli, OPENCODE_CLI", "codebuddy_cli, CODEBUDDY_CLI"})
     void updateConfig_recoversLocalCliWithoutQoderModelSettings(String requestedKind, String clientKind) {
         when(executorDao.findById(9L)).thenReturn(executor(9L, null, null, 1));
         when(executorDao.updateLaunchConfigWithClientKind(eq(9L), eq(TENANT), anyString(), eq(clientKind),

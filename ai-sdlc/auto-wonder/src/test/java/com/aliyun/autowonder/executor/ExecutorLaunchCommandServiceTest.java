@@ -166,7 +166,7 @@ class ExecutorLaunchCommandServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CLAUDE_CODE, claude", "CODEX_CLI, codex", "OPENCODE_CLI, opencode"})
+    @CsvSource({"CLAUDE_CODE, claude", "CODEX_CLI, codex", "OPENCODE_CLI, opencode", "CODEBUDDY_CLI, codebuddy"})
     void localCliUsesBundledRuntimeAndOmitsQoderFlags(String clientKind, String provider) {
         ExecutorLaunchCommandVO vo = build("awexec_plain", clientKind, "provider-local", null,
                 null, null, "posix", false, null);

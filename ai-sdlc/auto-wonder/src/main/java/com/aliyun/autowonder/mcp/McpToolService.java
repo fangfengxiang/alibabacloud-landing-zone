@@ -273,8 +273,9 @@ public class McpToolService {
      * ids Redis currently holds, because usable model ids rotate and must never be hardcoded by a caller.
      */
     private static final String EXECUTOR_MODEL_DESCRIPTION =
-            "Optional. For Claude Code, Codex CLI, and OpenCode, use a model ID configured on the execution host. "
-                    + "OpenCode accepts provider/model#variant. Without a saved model the CLI uses its own default. "
+            "Optional. For Claude Code, Codex CLI, OpenCode, and CodeBuddy Code, use a model ID configured on the "
+                    + "execution host. OpenCode accepts provider/model#variant. Without a saved model the CLI uses "
+                    + "its own default. "
                     + "Qoder model IDs are assembled server-side from "
                     + "the provider catalog that Redis refreshes automatically, so never hardcode one. Omit this "
                     + "argument and the server resolves a currently usable id, or call "
@@ -1696,7 +1697,7 @@ public class McpToolService {
                                                 + "pre-selects."),
                                 prop("model", "string", EXECUTOR_MODEL_DESCRIPTION),
                                 enumProp("reasoningEffort", ExecutorLaunchOptionsService.executorReasoningEffortValues(),
-                                        "Optional. Reasoning effort for Qoder, Claude Code, or Codex CLI; defaults to the chosen model's "
+                                        "Optional. Reasoning effort for Qoder, Claude Code, Codex CLI, or CodeBuddy Code; defaults to the chosen model's "
                                                 + "default."),
                                 enumProp("contextWindow", ExecutorLaunchOptionsService.contextWindowValues(),
                                         "Optional. Context window to persist; defaults to the chosen model's "
@@ -1750,7 +1751,7 @@ public class McpToolService {
                                 enumProp("reasoningEffort", java.util.stream.Stream.concat(
                                                 ExecutorLaunchOptionsService.executorReasoningEffortValues().stream(),
                                                 java.util.stream.Stream.of("")).toList(),
-                                        "Optional. Reasoning effort for Qoder, Claude Code, or Codex CLI. Get supported values from launch options. Use an empty string to clear a saved effort for a bundled CLI."),
+                                        "Optional. Reasoning effort for Qoder, Claude Code, Codex CLI, or CodeBuddy Code. Get supported values from launch options. Use an empty string to clear a saved effort for a bundled CLI."),
                                 enumProp("contextWindow", ExecutorLaunchOptionsService.contextWindowValues(),
                                         "Optional. Context window for Qoder executors."))),
                 tool(BUILD_EXECUTOR_LAUNCH_COMMAND, "Build the startup command for an existing executor, identical to "

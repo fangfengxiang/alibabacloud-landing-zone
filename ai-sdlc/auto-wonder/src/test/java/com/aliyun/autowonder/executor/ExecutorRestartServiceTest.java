@@ -257,7 +257,7 @@ class ExecutorRestartServiceTest {
         config.memoryMode = "platform";
         when(launchConfigs.requireCompleteConfig(7L, 1L, 9)).thenReturn(config);
         ExecutorDO executor = dao.findById(7L);
-        for (String clientKind : List.of("CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI")) {
+        for (String clientKind : List.of("CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI", "CODEBUDDY_CLI")) {
             executor.setClientKind(clientKind);
             assertThrows(BizException.class, () -> service.applyLaunchCommand(7L, 1L, 3L, 9));
             assertThrows(BizException.class, () -> service.request(7L, 1L, 3L, true));
