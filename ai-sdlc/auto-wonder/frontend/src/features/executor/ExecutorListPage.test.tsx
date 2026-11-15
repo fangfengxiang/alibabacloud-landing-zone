@@ -653,6 +653,7 @@ describe('ExecutorListPage', () => {
     expect(screen.getByText('Qoder CLI CN')).toBeInTheDocument();
     expect(screen.getByText('Claude Code')).toBeInTheDocument();
     expect(screen.getByText('Codex CLI')).toBeInTheDocument();
+    expect(screen.getByText('OpenCode')).toBeInTheDocument();
     expect(screen.queryByText('Cursor CLI')).not.toBeInTheDocument();
     expect(screen.getByText('记忆模式')).toBeInTheDocument();
     expect(screen.getByText('Qoder 模型')).toBeInTheDocument();
@@ -747,6 +748,7 @@ describe('ExecutorListPage', () => {
     ['QODER_CLI', 'Qoder CLI'],
     ['CLAUDE_CODE', 'Claude Code'],
     ['CODEX_CLI', 'Codex CLI'],
+    ['OPENCODE_CLI', 'OpenCode'],
   ])('submits the selected agent and %s settings', async (clientKind, label) => {
     const user = userEvent.setup();
     let createdPathname: string | null = null;
@@ -1029,6 +1031,7 @@ describe('ExecutorListPage', () => {
     expect(isQoderClientKind('QODER_CN_CLI')).toBe(true);
     expect(isQoderClientKind('CLAUDE_CODE')).toBe(false);
     expect(isQoderClientKind('CODEX_CLI')).toBe(false);
+    expect(isQoderClientKind('OPENCODE_CLI')).toBe(false);
     expect(isQoderClientKind('CURSOR_CLI')).toBe(false);
     expect(isQoderClientKind(undefined)).toBe(false);
   });
@@ -1043,11 +1046,31 @@ describe('ExecutorListPage', () => {
     expect(isClientKindMissing('CLAUDE_CODE')).toBe(false);
   });
 
-  it('offers Claude Code, Codex CLI, and both Qoder CLIs for creation', () => {
-    expect(CREATABLE_CLIENT_KINDS.map((kind) => kind.value)).toEqual(['QODER_CN_CLI', 'QODER_CLI', 'CLAUDE_CODE', 'CODEX_CLI']);
+  it.each([
+    ['Claude Code', '2.1.311'],
+    ['Codex CLI', '0.167.0-alpha.4.1'],
+    ['OpenCode', '2.2.7'],
+  ])('shows the tested %s version without changing the selected executor', async (client, version) => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /新建执行器/ }));
+    const dialog = screen.getByRole('dialog', { name: '新建执行器' });
+    const help = within(dialog).getByRole('button', { name: i18n.t('executor:clientTestedVersionLabel', { client }) });
+    await user.hover(help);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(version);
+    expect(within(dialog).getByRole('button', { name: client })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('offers Claude Code in the create modal and displays existing Claude executors', async () => {
+  it('offers both Qoder CLIs, Claude Code, Codex CLI, and OpenCode for creation', () => {
+    expect(CREATABLE_CLIENT_KINDS.map((kind) => kind.value)).toEqual([
+      'QODER_CN_CLI', 'QODER_CLI', 'CLAUDE_CODE', 'CODEX_CLI', 'OPENCODE_CLI',
+    ]);
+  });
+
+  it.each([
+    ['CLAUDE_CODE', 'Claude Code'],
+    ['OPENCODE_CLI', 'OpenCode'],
+  ])('offers %s in the create modal and displays existing executors', async (clientKind, label) => {
     const user = userEvent.setup();
     server.use(
       http.get('/api/agents', () => HttpResponse.json({
@@ -1056,14 +1079,14 @@ describe('ExecutorListPage', () => {
       })),
       http.get('/api/executors', () => HttpResponse.json({
         success: true, code: '0', message: '', traceId: null,
-        data: [{ id: 11, agentId: 1, agentName: 'Alpha', name: 'legacy-runner', status: 'OFFLINE', clientKind: 'CLAUDE_CODE', lastConnectIp: null, lastHeartbeat: null, gmtCreate: '2026-07-01' }],
+        data: [{ id: 11, agentId: 1, agentName: 'Alpha', name: 'legacy-runner', status: 'OFFLINE', clientKind, lastConnectIp: null, lastHeartbeat: null, gmtCreate: '2026-07-01' }],
       })),
     );
     renderPage();
     await expandAgentGroup(user, 'Alpha（未编队）');
 
     expect(screen.getByText('legacy-runner')).toBeInTheDocument();
-    expect(screen.getByText('Claude Code')).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /新建执行器/ }));
     const createDialog = screen.getByRole('dialog', { name: '新建执行器' });
@@ -1071,6 +1094,7 @@ describe('ExecutorListPage', () => {
     expect(within(createDialog).getByText('Qoder CLI CN')).toBeInTheDocument();
     expect(within(createDialog).getByText('Claude Code')).toBeInTheDocument();
     expect(within(createDialog).getByText('Codex CLI')).toBeInTheDocument();
+    expect(within(createDialog).getByText('OpenCode')).toBeInTheDocument();
     expect(within(createDialog).queryByText('Cursor CLI')).not.toBeInTheDocument();
   });
 
@@ -1291,6 +1315,46 @@ describe('ExecutorListPage', () => {
     expect(await screen.findByText(/--provider claude/)).toBeInTheDocument();
     expect(screen.queryByText(/--model/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '复制启动命令' })).toBeEnabled();
+  });
+
+  it('previews and saves bundled model settings and reloads them after a full command edit', async () => {
+    const user = userEvent.setup();
+    serveExecutor({ clientKind: 'CODEX_CLI' }, { model: 'initial-model', reasoningEffort: 'medium' });
+    let editedCommand: string | undefined;
+    server.use(http.put('/api/executors/10000/launch-command', async ({ request }) => {
+      const { command, version } = await request.json() as { command: string; version: number };
+      editedCommand = command;
+      const config = {
+        ...defaultLaunchConfig('CODEX_CLI'), model: 'edited-model', reasoningEffort: 'low', version: version + 1,
+      };
+      setExecutorLaunchConfig(10000, config);
+      return HttpResponse.json({ success: true, data: config });
+    }));
+    renderPage();
+    await expandAgentGroup(user, 'A（未编队）');
+    await user.click(screen.getByRole('button', { name: '启动命令' }));
+    const dialog = await findModalByTitle('启动命令 · dev-machine-01');
+    const model = within(dialog).getByRole('textbox', { name: 'CLI 模型' });
+    await waitFor(() => expect(model).toHaveValue('initial-model'));
+    fireEvent.change(model, { target: { value: 'configured-model' } });
+    await selectInForm(user, dialog, '推理强度', 'minimal');
+    await waitFor(() => expect(previewedCommand(dialog)).toContain('--model configured-model --reasoning-effort minimal'));
+    expect(launchConfigUpdatesFor(10000)).toHaveLength(0);
+    await user.click(within(dialog).getByRole('button', { name: '保存配置' }));
+    expect(await screen.findByText(/启动配置已保存/)).toBeInTheDocument();
+    expect(launchConfigUpdatesFor(10000)).toEqual([
+      expect.objectContaining({ model: 'configured-model', reasoningEffort: 'minimal', version: 1 }),
+    ]);
+
+    await user.click(within(dialog).getByRole('button', { name: '编辑完整命令' }));
+    const input = await within(dialog).findByRole<HTMLTextAreaElement>('textbox', { name: '完整启动命令' });
+    const draft = input.value.replace('--model configured-model --reasoning-effort minimal', '--model edited-model --reasoning-effort low');
+    fireEvent.change(input, { target: { value: draft } });
+    await user.click(within(dialog).getByRole('button', { name: '保存命令' }));
+    await waitFor(() => expect(model).toHaveValue('edited-model'));
+    expect(editedCommand).toContain('--model edited-model --reasoning-effort low');
+    expect(selectedValue(formItemSelect(dialog, '推理强度'))).toBe('low');
+    await waitFor(() => expect(previewedCommand(dialog)).toContain('--model edited-model --reasoning-effort low'));
   });
 
   it('lets read/write roles apply the saved startup configuration online', async () => {
@@ -1736,6 +1800,7 @@ describe('ExecutorListPage', () => {
   it.each([
     ['CLAUDE_CODE', 'Claude Code', 'claude'],
     ['CODEX_CLI', 'Codex CLI', 'codex'],
+    ['OPENCODE_CLI', 'OpenCode', 'opencode'],
   ])('recovers a kindless executor with %s and copies its command', async (clientKind, label, provider) => {
     const user = userEvent.setup();
     const writeText = mockClipboardWrite();
@@ -2622,8 +2687,7 @@ describe('ExecutorListPage', () => {
     expect(launchErrorMessage(new Error('网络异常'), '兜底文案')).toBe('兜底文案');
   });
 
-  // QA-2（tsx:559-561）：非 Qoder 执行器 + 服务端已有配置时仅回填 memoryMode；复制 PUT 载荷只含 memoryMode+version
-  it('backfills only memoryMode for a non-Qoder executor when the server already has a config', async () => {
+  it('omits unset CLI model settings when copying a Claude Code launch command', async () => {
     const user = userEvent.setup();
     const writeText = mockClipboardWrite();
     let putBody: Record<string, unknown> | null = null;
@@ -2651,10 +2715,11 @@ describe('ExecutorListPage', () => {
     await user.click(await screen.findByRole('button', { name: /启动命令/ }));
     const dialog = await findModalByTitle('启动命令 · dev-machine-01');
 
-    // memoryMode 回填为服务端值；非 Qoder 不渲染 model/reasoningEffort/Context Window 三项
+    // 回填服务端记忆模式，保留可选的 CLI 模型和推理强度。
     await waitFor(() => expect(previewedCommand(dialog)).toContain('--memory-mode provider-local'));
     expect(within(dialog).queryByText('Qoder 模型')).not.toBeInTheDocument();
-    expect(within(dialog).queryByText('推理强度')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: 'CLI 模型' })).toHaveValue('');
+    expect(within(dialog).getByText('推理强度', { selector: 'label' })).toBeInTheDocument();
     expect(within(dialog).queryByText('上下文窗口')).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole('button', { name: '复制启动命令' }));

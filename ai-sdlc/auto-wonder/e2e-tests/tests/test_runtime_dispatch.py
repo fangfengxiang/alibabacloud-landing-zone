@@ -79,6 +79,59 @@ class RuntimeSafetyTests(unittest.TestCase):
                                       dict(launch, command=command.replace("--provider codex", "--provider qoder")),
                                       connection)
 
+    def test_opencode_preflight_uses_only_isolated_xdg_directories(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            for name in ("config", "data", "state", "cache"):
+                (root / name).mkdir(mode=0o700)
+            env = {"AW_E2E_OPENCODE_HOME": str(root), "PATH": "/test/bin",
+                   "DASHSCOPE_API_KEY": "test-provider-key", "OPENCODE_CONFIG": "/global/config.json"}
+            with patch.dict(os.environ, env, clear=True), \
+                    patch.object(runtime.shutil, "which", return_value="/test/bin/opencode"), \
+                    patch.object(runtime.subprocess, "run", return_value=Mock(returncode=0, stdout="opencode v2.2.7\n")) as cli:
+                runtime.require_provider_cli("opencode")
+                self.assertEqual(cli.call_args.args[0], ["/test/bin/opencode", "--version"])
+                process_env = cli.call_args.kwargs["env"]
+                self.assertEqual(process_env["XDG_CONFIG_HOME"], str(root / "config"))
+                self.assertEqual(process_env["XDG_DATA_HOME"], str(root / "data"))
+                self.assertEqual(process_env["XDG_STATE_HOME"], str(root / "state"))
+                self.assertEqual(process_env["XDG_CACHE_HOME"], str(root / "cache"))
+                self.assertNotIn("DASHSCOPE_API_KEY", process_env)
+                self.assertNotIn("OPENCODE_CONFIG", process_env)
+                self.assertNotEqual(process_env["HOME"], str(Path.home()))
+                cli.return_value.stdout = "v2.2.2\n"
+                with self.assertRaisesRegex(runtime.CheckFailure, "OPENCODE_VERSION_UNSUPPORTED"):
+                    runtime.require_provider_cli("opencode")
+                (root / "data").rmdir()
+                (root / "data").symlink_to(root / "config")
+                with self.assertRaisesRegex(runtime.CheckFailure, "OPENCODE_TEST_HOME_REQUIRED"):
+                    runtime.require_provider_cli("opencode")
+
+    def test_opencode_runtime_limits_credentials_and_keeps_temporary_files_private(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            for name in ("config", "data", "state", "cache"):
+                (root / name).mkdir(mode=0o700)
+            env = {"AW_E2E_OPENCODE_HOME": str(root), "PATH": "/test/bin",
+                   "DASHSCOPE_API_KEY": "test-provider-key", "QODER_PERSONAL_ACCESS_TOKEN": "other-secret",
+                   "CODEX_HOME": "/global/codex", "XDG_CONFIG_HOME": "/global/config"}
+            connection = {"AUTOWONDER_PROVIDER": "opencode", "AUTOWONDER_EXECUTOR_TOKEN": "test-executor-token"}
+            owner = runtime.OwnedRuntime(["/test/bin/node"], connection, root)
+            try:
+                with patch.dict(os.environ, env, clear=True), patch.object(runtime.subprocess, "Popen") as process:
+                    owner.__enter__()
+                    process_env = process.call_args.kwargs["env"]
+                    self.assertEqual(process_env["DASHSCOPE_API_KEY"], "test-provider-key")
+                    self.assertEqual(process_env["XDG_CONFIG_HOME"], str(root / "config"))
+                    self.assertTrue(Path(process_env["HOME"]).is_dir())
+                    self.assertEqual(Path(process_env["HOME"]).stat().st_mode & 0o777, 0o700)
+                    self.assertNotIn("QODER_PERSONAL_ACCESS_TOKEN", process_env)
+                    self.assertNotIn("CODEX_HOME", process_env)
+                    self.assertEqual(process.call_args.args[0], ["/test/bin/node"])
+            finally:
+                if owner.directory:
+                    owner.directory.cleanup()
+
     def test_executor_selection_preserves_existing_host_lock(self):
         fn = self.function("reserve_executor")
         class FakeApi:

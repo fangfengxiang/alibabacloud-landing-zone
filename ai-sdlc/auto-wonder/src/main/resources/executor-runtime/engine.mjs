@@ -20,7 +20,32 @@ const CLAUDE_ENV = [
   'CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS',
   'CLAUDE_CODE_GZIP_REQUEST_BODIES', 'CLAUDE_CODE_CERT_STORE', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
 ];
+const OPENCODE_ENV = [
+  'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME',
+  'DASHSCOPE_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY',
+];
+const OPENCODE_MIN_VERSION = [2, 2, 3];
+const OPENCODE_FILE_ACTIONS = ['read', 'edit', 'glob', 'grep'];
+const OPENCODE_DISABLED_INTEGRATIONS = ['plugin.use', 'mcp.use', 'skill.use'];
 const CODEX_ENV = ['CODEX_HOME', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'AZURE_OPENAI_API_KEY'];
+const MAX_MODEL_ID_LENGTH = 200;
+const MODEL_ID = /^[A-Za-z0-9_.:/+][A-Za-z0-9_.:/+-]*$/;
+const OPENCODE_MODEL_ID = /^[A-Za-z0-9_.:/+][A-Za-z0-9_.:/+-]*(?:#[A-Za-z0-9_.+-]+)?$/;
+const REASONING_EFFORTS = new Map([
+  ['claude', ['low', 'medium', 'high', 'xhigh', 'max']],
+  ['codex', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']],
+]);
+
+export function validateModelOptions(provider, model, reasoningEffort) {
+  const modelPattern = provider === 'opencode' ? OPENCODE_MODEL_ID : MODEL_ID;
+  if (model != null && (typeof model !== 'string' || model.length > MAX_MODEL_ID_LENGTH
+      || model !== model.trim() || !modelPattern.test(model))) {
+    throw new Error('EXECUTOR_MODEL_INVALID');
+  }
+  if (reasoningEffort != null && !REASONING_EFFORTS.get(provider)?.includes(reasoningEffort)) {
+    throw new Error('EXECUTOR_EFFORT_UNSUPPORTED');
+  }
+}
 
 function copyEnv(names, source, target) {
   for (const name of names) {
@@ -28,7 +53,7 @@ function copyEnv(names, source, target) {
   }
 }
 
-async function claudeCommand(env, memoryMode) {
+async function claudeCommand(env, memoryMode, model, reasoningEffort) {
   const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
   let settings;
   try {
@@ -45,13 +70,13 @@ async function claudeCommand(env, memoryMode) {
     '--permission-mode', 'acceptEdits', '--tools', 'Read,Write,Edit,Glob,Grep',
   ];
   if (memoryMode !== 'provider-local') args.push('--no-session-persistence');
-  if (!env.ANTHROPIC_MODEL && typeof settings?.model === 'string' && settings.model.trim()) {
-    args.push('--model', settings.model);
-  }
+  const selectedModel = model ?? (env.ANTHROPIC_MODEL ? null : settings?.model);
+  if (typeof selectedModel === 'string' && selectedModel.trim()) args.push('--model', selectedModel);
+  if (reasoningEffort) args.push('--effort', reasoningEffort);
   return { binary: 'claude', args, readSummary: claudeSummary };
 }
 
-function codexCommand(env, memoryMode) {
+function codexCommand(env, memoryMode, model, reasoningEffort) {
   copyEnv(CODEX_ENV, process.env, env);
   const args = [
     '--ask-for-approval', 'never', 'exec', '--sandbox', 'workspace-write', '--skip-git-repo-check',
@@ -60,8 +85,44 @@ function codexCommand(env, memoryMode) {
     '-c', 'shell_environment_policy.exclude=["*TOKEN*","*KEY*","*SECRET*","*PASSWORD*","*CREDENTIAL*"]',
   ];
   if (memoryMode !== 'provider-local') args.push('--ephemeral');
+  if (model) args.push('--model', model);
+  if (reasoningEffort) args.push('-c', 'model_reasoning_effort=' + JSON.stringify(reasoningEffort));
   args.push('-');
   return { binary: 'codex', args, readSummary: codexSummary };
+}
+
+function opencodeCommand(env, memoryMode, directory, model) {
+  copyEnv(OPENCODE_ENV, process.env, env);
+  env.PWD = directory;
+  env.OPENCODE_DISABLE_PROJECT_CONFIG = '1';
+  env.OPENCODE_DISABLE_CLAUDE_CODE = '1';
+  env.OPENCODE_DISABLE_AUTOUPDATE = '1';
+  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+    permissions: [
+      { action: '*', resource: '*', effect: 'deny' },
+      ...OPENCODE_FILE_ACTIONS.map(action => ({ action, resource: '*', effect: 'allow' })),
+      { action: 'external_directory', resource: '*', effect: 'deny' },
+    ],
+    policies: OPENCODE_DISABLED_INTEGRATIONS.map(action => ({ action, resource: '*', effect: 'deny' })),
+  });
+  if (memoryMode !== 'provider-local') env.OPENCODE_DB = ':memory:';
+  const args = ['run', '--standalone', '--format', 'json', '--archived'];
+  if (model) args.push('--model', model);
+  return { binary: 'opencode', args, readSummary: opencodeSummary };
+}
+
+function opencodeSummary(output) {
+  let finishReason;
+  const summary = [];
+  for (const line of output.trim().split('\n')) {
+    const event = JSON.parse(line);
+    if (event.type === 'error') throw new Error('OPENCODE_TURN_FAILED');
+    if (event.type === 'step_start') finishReason = undefined;
+    if (event.type === 'step_finish') finishReason = event.part?.reason;
+    if (event.type === 'text' && typeof event.part?.text === 'string') summary.push(event.part.text);
+  }
+  if (finishReason !== 'stop' || !summary.length) throw new Error('OPENCODE_TURN_FAILED');
+  return summary.join('\n');
 }
 
 function claudeSummary(output) {
@@ -163,17 +224,29 @@ function runCli(command, directory, env, prompt, signal) {
   });
 }
 
-export async function runEngine(provider, capsule, directory, { memoryMode }, signal) {
+export async function runEngine(provider, capsule, directory, { memoryMode, model, reasoningEffort }, signal) {
+  validateModelOptions(provider, model, reasoningEffort);
   const env = {};
   copyEnv(HOST_ENV, process.env, env);
   let command;
   switch (provider) {
     case 'claude':
-      command = await claudeCommand(env, memoryMode);
+      command = await claudeCommand(env, memoryMode, model, reasoningEffort);
       break;
     case 'codex':
-      command = codexCommand(env, memoryMode);
+      command = codexCommand(env, memoryMode, model, reasoningEffort);
       break;
+    case 'opencode': {
+      command = opencodeCommand(env, memoryMode, directory, model);
+      const version = await runCli({ ...command, args: ['--version'] }, directory, env, '', signal);
+      const match = /^(?:opencode\s+)?v?(\d+)\.(\d+)\.(\d+)$/i.exec(version.trim());
+      const current = match?.slice(1).map(Number);
+      const difference = current?.findIndex((part, index) => part !== OPENCODE_MIN_VERSION[index]);
+      if (!current || (difference >= 0 && current[difference] < OPENCODE_MIN_VERSION[difference])) {
+        throw new Error('OPENCODE_VERSION_UNSUPPORTED');
+      }
+      break;
+    }
     default:
       throw new Error('EXECUTOR_PROVIDER_UNSUPPORTED');
   }

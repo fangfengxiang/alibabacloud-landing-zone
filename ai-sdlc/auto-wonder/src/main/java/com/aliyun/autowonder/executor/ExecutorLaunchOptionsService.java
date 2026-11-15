@@ -31,10 +31,12 @@ public class ExecutorLaunchOptionsService {
     public static final String CLIENT_KIND_QODER_CN_CLI = "QODER_CN_CLI";
     public static final String CLIENT_KIND_CLAUDE_CODE = "CLAUDE_CODE";
     public static final String CLIENT_KIND_CODEX_CLI = "CODEX_CLI";
+    public static final String CLIENT_KIND_OPENCODE_CLI = "OPENCODE_CLI";
     public static final String PROVIDER_QODER = "qoder";
     public static final String PROVIDER_QODER_CN = "qodercn";
     public static final String PROVIDER_CLAUDE = "claude";
     public static final String PROVIDER_CODEX = "codex";
+    public static final String PROVIDER_OPENCODE = "opencode";
     public static final String PROVIDER_CURSOR = "cursor";
 
     public static final String MEMORY_MODE_PLATFORM = "platform";
@@ -58,7 +60,8 @@ public class ExecutorLaunchOptionsService {
             new SelectOptionVO(CLIENT_KIND_QODER_CLI, "Qoder CLI", "国际版 Qoder CLI 执行器"),
             new SelectOptionVO(CLIENT_KIND_QODER_CN_CLI, "Qoder CLI CN", "国内版 Qoder CLI 执行器"),
             new SelectOptionVO(CLIENT_KIND_CLAUDE_CODE, "Claude Code", "Claude Code 执行器"),
-            new SelectOptionVO(CLIENT_KIND_CODEX_CLI, "Codex CLI", "Codex CLI 执行器"));
+            new SelectOptionVO(CLIENT_KIND_CODEX_CLI, "Codex CLI", "Codex CLI 执行器"),
+            new SelectOptionVO(CLIENT_KIND_OPENCODE_CLI, "OpenCode", "OpenCode 执行器"));
 
     private static final Map<String, String> PROVIDER_BY_CLIENT_KIND;
 
@@ -68,6 +71,7 @@ public class ExecutorLaunchOptionsService {
         providers.put(CLIENT_KIND_QODER_CLI, PROVIDER_QODER);
         providers.put(CLIENT_KIND_CLAUDE_CODE, PROVIDER_CLAUDE);
         providers.put(CLIENT_KIND_CODEX_CLI, PROVIDER_CODEX);
+        providers.put(CLIENT_KIND_OPENCODE_CLI, PROVIDER_OPENCODE);
         providers.put("CURSOR_CLI", PROVIDER_CURSOR);
         PROVIDER_BY_CLIENT_KIND = Map.copyOf(providers);
     }
@@ -134,6 +138,11 @@ public class ExecutorLaunchOptionsService {
         return values(CONTEXT_WINDOWS);
     }
 
+    public static List<String> executorReasoningEffortValues() {
+        return java.util.stream.Stream.concat(reasoningEffortValues().stream(),
+                BundledExecutorRuntime.reasoningEfforts(PROVIDER_CODEX).stream()).distinct().toList();
+    }
+
     public static List<String> reasoningEffortValues() {
         return values(REASONING_EFFORTS);
     }
@@ -184,7 +193,8 @@ public class ExecutorLaunchOptionsService {
         vo.setDefaultMemoryMode(DEFAULT_MEMORY_MODE);
         if (!isQoderFamily(provider)) {
             vo.setModels(List.of());
-            vo.setReasoningEfforts(List.of());
+            vo.setReasoningEfforts(BundledExecutorRuntime.reasoningEfforts(provider).stream()
+                    .map(effort -> SelectOptionVO.of(effort, effort)).toList());
             vo.setContextWindows(List.of());
             return vo;
         }

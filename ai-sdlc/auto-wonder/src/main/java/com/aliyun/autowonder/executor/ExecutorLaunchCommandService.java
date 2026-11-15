@@ -149,6 +149,8 @@ public class ExecutorLaunchCommandService {
         String wsUrl = buildWsUrl(publicBaseUrl);
         String provider = ExecutorLaunchOptionsService.resolveProvider(clientKind);
         boolean qoderFamily = ExecutorLaunchOptionsService.isQoderFamily(provider);
+        boolean bundledEffort = bundled && reasoningEffort != null
+                && BundledExecutorRuntime.reasoningEfforts(provider).contains(reasoningEffort);
 
         List<String> argv = new ArrayList<>(bundled ? BundledExecutorRuntime.commandPrefix()
                 : List.of("npx", "-y", RuntimeNpmPackage.spec(runtimeVersion), "connect"));
@@ -162,6 +164,10 @@ public class ExecutorLaunchCommandService {
             argv.addAll(List.of("--model", model,
                     "--reasoning-effort", reasoningEffort,
                     "--context-window", contextWindow));
+        }
+        if (bundled && model != null) argv.addAll(List.of("--model", model));
+        if (bundledEffort) {
+            argv.addAll(List.of("--reasoning-effort", reasoningEffort));
         }
         if (qoderFamily) {
             argv.add("--token-aware-enable");
@@ -190,8 +196,8 @@ public class ExecutorLaunchCommandService {
         vo.setProvider(provider);
         vo.setMemoryMode(memoryMode);
         vo.setMaxConcurrentDispatches(maxConcurrentDispatches);
-        vo.setModel(qoderFamily ? model : null);
-        vo.setReasoningEffort(qoderFamily ? reasoningEffort : null);
+        vo.setModel(qoderFamily || bundled ? model : null);
+        vo.setReasoningEffort(qoderFamily || bundledEffort ? reasoningEffort : null);
         vo.setContextWindow(qoderFamily ? contextWindow : null);
         vo.setWsUrl(wsUrl);
         vo.setRuntimeVersion(runtimeVersion);

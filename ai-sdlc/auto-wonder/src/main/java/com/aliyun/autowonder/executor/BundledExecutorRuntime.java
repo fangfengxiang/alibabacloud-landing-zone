@@ -9,19 +9,25 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.regex.Pattern;
 
 final class BundledExecutorRuntime {
     static final String ROUTE = "/executor-runtime/";
     private static final List<String> MODULES = List.of("executor.mjs", "engine.mjs", "capsule.mjs");
     private static final int MAX_MODULE_BYTES = 1024 * 1024;
     private static final String VERSION_PREFIX = "community-";
+    private static final int MAX_MODEL_ID_LENGTH = 200;
+    private static final String MODEL_ID = "[A-Za-z0-9_.:/+][A-Za-z0-9_.:/+-]*";
+    private static final Pattern MODEL_ID_PATTERN = Pattern.compile(MODEL_ID);
+    private static final Pattern OPENCODE_MODEL_ID_PATTERN = Pattern.compile(MODEL_ID + "(?:#[A-Za-z0-9_.+-]+)?");
 
     private BundledExecutorRuntime() {
     }
 
     static boolean supports(String clientKind) {
         return ExecutorLaunchOptionsService.CLIENT_KIND_CLAUDE_CODE.equals(clientKind)
-                || ExecutorLaunchOptionsService.CLIENT_KIND_CODEX_CLI.equals(clientKind);
+                || ExecutorLaunchOptionsService.CLIENT_KIND_CODEX_CLI.equals(clientKind)
+                || ExecutorLaunchOptionsService.CLIENT_KIND_OPENCODE_CLI.equals(clientKind);
     }
 
     static ClassPathResource module(String name) {
@@ -30,6 +36,20 @@ final class BundledExecutorRuntime {
 
     static List<String> commandPrefix() {
         return Bootstrap.COMMAND_PREFIX;
+    }
+
+    static boolean validModel(String provider, String model) {
+        Pattern pattern = ExecutorLaunchOptionsService.PROVIDER_OPENCODE.equals(provider)
+                ? OPENCODE_MODEL_ID_PATTERN : MODEL_ID_PATTERN;
+        return model.length() <= MAX_MODEL_ID_LENGTH && pattern.matcher(model).matches();
+    }
+
+    static List<String> reasoningEfforts(String provider) {
+        return switch (provider) {
+            case ExecutorLaunchOptionsService.PROVIDER_CLAUDE -> List.of("low", "medium", "high", "xhigh", "max");
+            case ExecutorLaunchOptionsService.PROVIDER_CODEX -> List.of("none", "minimal", "low", "medium", "high", "xhigh");
+            default -> List.of();
+        };
     }
 
     static boolean isBundledVersion(String version) {

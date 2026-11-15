@@ -207,7 +207,7 @@ function verifyManifest(frame, manifest, entries) {
     && Object.keys(manifest.fileDigests).length === entries.size - 1, 'CAPSULE_MANIFEST_INVALID');
 }
 
-export async function prepareCapsule(frame, directory, signal) {
+export async function prepareCapsule(frame, directory, signal, memoryMode = 'platform') {
   requireValid(Number.isSafeInteger(frame.size) && frame.size > 0 && frame.size <= MAX_ARCHIVE_BYTES,
     'CAPSULE_SIZE_INVALID');
   requireValid((await lstat(directory)).isDirectory() && (await readdir(directory)).length === 0,
@@ -230,6 +230,7 @@ export async function prepareCapsule(frame, directory, signal) {
       requireValid(Object.hasOwn(manifest.fileDigests, name)
         && manifest.fileDigests[name] === 'sha256:' + digest('sha256', content), 'CAPSULE_FILE_INTEGRITY_FAILED');
     }
+    if (memoryMode !== 'platform' && entry.parts[0] === 'memory') continue;
     if (name === 'identity.json') identity = jsonObject(content);
     if (name === 'sdlc.json') sdlc = jsonObject(content);
     if (name === 'workitem.md') workitem = UTF8.decode(content);

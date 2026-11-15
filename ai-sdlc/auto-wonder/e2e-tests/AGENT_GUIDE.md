@@ -131,6 +131,29 @@ credentials without running Claude account login. Supply the key from a local
 secret store. For automated Bailian tasks, use a pay-as-you-go API key with
 the Anthropic-compatible endpoint for its region.
 
+For OpenCode, select `AW_E2E_RUNTIME_PROVIDER=opencode` and provide an absolute,
+private `AW_E2E_OPENCODE_HOME` directory with private `config`, `data`, `state`,
+and `cache` children. The CLI uses these as its XDG directories. Set up a
+working OpenCode model and its credentials in the dedicated directory before
+running the check. A Bailian config can use environment substitution for
+`DASHSCOPE_API_KEY`, supplied through the environment from a local secret store.
+The preflight requires OpenCode 2.2.3 or later on PATH. The dispatch scenario
+checks model access by completing an assignment and downloading its artifact.
+
+For any bundled provider, optionally set `AW_E2E_EXECUTOR_MODEL` to a model
+available through its configured credentials. For OpenCode use `provider/model`
+or `provider/model#variant` when selecting a configured model variant.
+Claude Code and Codex CLI also accept
+`AW_E2E_EXECUTOR_REASONING_EFFORT` with a value supported by that model. Leave
+that variable unset for OpenCode. The check saves the selected settings in the
+test executor's launch configuration, verifies the matching generated arguments,
+then runs the command and completes the same dispatch and artifact assertions.
+`runtime-dispatch.json` includes `generated_launch_model` and
+`generated_launch_reasoningEffort` in its checks when those settings are tested.
+
+Run a separate lifecycle for each provider so the lifecycle archives its own
+`runtime-dispatch.json`.
+
 This opt-in check requires a real online executor, successful task dispatch and
 downloaded artifact validation; missing prerequisites fail rather than skip.
 `QODER_TOKEN_REQUIRED`, `QODER_CLI_REQUIRED`, and `RUNTIME_PACKAGE_REQUIRED` identify

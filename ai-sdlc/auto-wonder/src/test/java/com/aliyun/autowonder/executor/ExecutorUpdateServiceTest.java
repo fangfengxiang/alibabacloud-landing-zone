@@ -105,16 +105,20 @@ class ExecutorUpdateServiceTest {
         claude.setClientKind("CLAUDE_CODE");
         var codex = executor(9L, 1L, "codex");
         codex.setClientKind("CODEX_CLI");
+        var opencode = executor(10L, 1L, "opencode");
+        opencode.setClientKind("OPENCODE_CLI");
         when(executorDao.findById(7L)).thenReturn(claude);
         when(executorDao.findById(9L)).thenReturn(codex);
+        when(executorDao.findById(10L)).thenReturn(opencode);
         when(registry.isOnline(anyLong())).thenReturn(false);
-        when(executorDao.listAll(1L, null)).thenReturn(List.of(claude, codex));
+        when(executorDao.listAll(1L, null)).thenReturn(List.of(claude, codex, opencode));
 
         assertThrows(BizException.class, () -> service.updateOne(7L, 1L, 3L));
         assertThrows(BizException.class, () -> service.updateOne(9L, 1L, 3L));
+        assertThrows(BizException.class, () -> service.updateOne(10L, 1L, 3L));
         var result = service.updateAll(1L, null, 3L);
         assertEquals(0, result.getScheduled());
-        assertEquals(2, result.getSkipped().size());
+        assertEquals(3, result.getSkipped().size());
         assertEquals(0, taskDao.size());
     }
 

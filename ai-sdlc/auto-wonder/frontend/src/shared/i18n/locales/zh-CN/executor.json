@@ -1,6 +1,12 @@
 {
   "clientClaudeCode": "Claude Code",
   "clientCodexCli": "Codex CLI",
+  "clientOpenCode": "OpenCode",
+  "cliModel": "CLI 模型",
+  "cliModelHelp": "输入执行机已配置的模型 ID。OpenCode 使用 provider/model，可追加 #variant。留空使用 CLI 默认模型。",
+  "cliDefault": "CLI 默认设置",
+  "clientTestedVersionLabel": "{{client}} 的验收版本",
+  "clientTestedVersionHelp": "{{client}} 实测版本为 {{version}}。建议使用此版本，以复现验收环境。",
   "online": "在线",
   "busy": "忙碌",
   "offline": "离线",

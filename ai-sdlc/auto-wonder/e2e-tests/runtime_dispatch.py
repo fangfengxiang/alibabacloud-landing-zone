@@ -122,7 +122,9 @@ def step_request(instruction):
             "timeoutSeconds": 300, "retryBudget": 0}
 
 
-RUNTIME_CLIENT_KINDS = {"qoder": "QODER_CLI", "codex": "CODEX_CLI", "claude": "CLAUDE_CODE"}
+RUNTIME_CLIENT_KINDS = {"qoder": "QODER_CLI", "codex": "CODEX_CLI", "claude": "CLAUDE_CODE",
+                        "opencode": "OPENCODE_CLI"}
+OPENCODE_MIN_VERSION = (2, 2, 3)
 CLAUDE_GATEWAY_ENV = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
                       "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL",
                       "ANTHROPIC_DEFAULT_OPUS_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL")
@@ -132,6 +134,27 @@ def claude_gateway_configured():
     return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip()
                 or (os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip()
                     and os.environ.get("ANTHROPIC_BASE_URL", "").strip()))
+
+
+def opencode_environment():
+    try:
+        home = Path(os.environ.get("AW_E2E_OPENCODE_HOME", ""))
+        if not home.is_absolute() or home.is_symlink():
+            raise ValueError
+        root = home.resolve(strict=True)
+        user_home = Path.home().resolve()
+        if (root == user_home or root in user_home.parents or not root.is_dir()
+                or root.stat().st_mode & 0o077):
+            raise ValueError
+        env = {}
+        for name in ("config", "data", "state", "cache"):
+            directory = root / name
+            if directory.is_symlink() or not directory.is_dir() or directory.stat().st_mode & 0o077:
+                raise ValueError
+            env[f"XDG_{name.upper()}_HOME"] = str(directory)
+        return env
+    except (OSError, RuntimeError, ValueError):
+        raise CheckFailure("OPENCODE_TEST_HOME_REQUIRED") from None
 
 
 def reserve_executor(api, agent_id, lock_root, provider="qoder"):
@@ -202,7 +225,7 @@ def wait_for(probe, timeout, failure):
 EVIDENCE_KEYS = frozenset(("verdict", "runtimeVersion", "workspaceId", "agentId",
     "agentVersionId", "executorId", "workitemId", "dispatchId", "stepId", "artifactId",
     "artifactSha256", "checks", "cleanup", "failureKind", "cleanupLogStart", "cleanupLogEnd",
-    "sourceRuntimeVersion", "runtimeRecommendationSource"))
+    "sourceRuntimeVersion", "runtimeRecommendationSource", "provider", "runtimeFailureCode"))
 
 
 def log_line_counts(state):
@@ -238,10 +261,10 @@ class OwnedRuntime:
                 raise CheckFailure("RUNTIME_LOCK_ALREADY_EXISTS")
         self.directory = tempfile.TemporaryDirectory(prefix="runtime-private-", dir=self.parent)
         root = self.directory.name
+        provider = self.connection_env.get("AUTOWONDER_PROVIDER")
         # Do not forward unrelated credentials or runtime settings from the host.
         env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG",
                "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY") if k in os.environ}
-        provider = self.connection_env.get("AUTOWONDER_PROVIDER")
         if provider == "codex":
             env["CODEX_HOME"] = os.environ["AW_E2E_CODEX_HOME"]
         elif provider == "claude":
@@ -253,6 +276,17 @@ class OwnedRuntime:
                 env["CLAUDE_CONFIG_DIR"] = str(claude_home)
             else:
                 env["CLAUDE_CONFIG_DIR"] = os.environ["AW_E2E_CLAUDE_HOME"]
+        elif provider == "opencode":
+            try:
+                env.update(opencode_environment())
+                isolated_home = Path(root) / "home"
+                isolated_home.mkdir(mode=0o700)
+                env.update(HOME=str(isolated_home), TMPDIR=root)
+                if os.environ.get("DASHSCOPE_API_KEY", "").strip():
+                    env["DASHSCOPE_API_KEY"] = os.environ["DASHSCOPE_API_KEY"]
+            except BaseException:
+                self.directory.cleanup()
+                raise
         elif "QODER_PERSONAL_ACCESS_TOKEN" in os.environ:
             env["QODER_PERSONAL_ACCESS_TOKEN"] = os.environ["QODER_PERSONAL_ACCESS_TOKEN"]
         env.update(self.connection_env)
@@ -383,6 +417,8 @@ def run_scenario(binary, state, base, storage_origin, recommendation, provider="
     api = Api(base)
     validate_download(storage_origin, storage_origin)
     evidence = dict(recommendation, verdict="FAIL", checks=[], cleanup=False)
+    if provider == "opencode":
+        evidence["provider"] = provider
     print(f"RUNTIME_PROVIDER={provider}", flush=True)
     executor_id = None
     owned = None
@@ -432,11 +468,21 @@ def run_scenario(binary, state, base, storage_origin, recommendation, provider="
         argv = [str(binary)]
         if provider != "qoder":
             stored_config = api.call("GET", f"/api/executors/{executor_id}/launch-config")
-            api.call("PUT", f"/api/executors/{executor_id}/launch-config",
-                     {"version": stored_config["version"], "memoryMode": "none", "maxConcurrentDispatches": 1})
+            launch_config = {"version": stored_config["version"], "memoryMode": "none", "maxConcurrentDispatches": 1}
+            for key, env_name in (("model", "AW_E2E_EXECUTOR_MODEL"),
+                                  ("reasoningEffort", "AW_E2E_EXECUTOR_REASONING_EFFORT")):
+                value = os.environ.get(env_name)
+                if value:
+                    launch_config[key] = value
+            api.call("PUT", f"/api/executors/{executor_id}/launch-config", launch_config)
             launch = api.call("POST", f"/api/executors/{executor_id}/launch-command",
                               {"os": "posix", "shell": "bash"})
             argv = local_launch_argv(binary, launch, connection)
+            for key, flag in (("model", "--model"), ("reasoningEffort", "--reasoning-effort")):
+                if key in launch_config:
+                    if argv.count(flag) != 1 or argv[argv.index(flag) + 1:argv.index(flag) + 2] != [launch_config[key]]:
+                        raise CheckFailure("LOCAL_EXECUTOR_LAUNCH_COMMAND_INVALID")
+                    evidence["checks"].append("generated_launch_" + key)
             evidence["runtimeVersion"] = launch["runtimeVersion"]
             evidence["runtimeRecommendationSource"] = "community-executor"
             evidence["checks"].append("generated_launch_command")
@@ -467,6 +513,15 @@ def run_scenario(binary, state, base, storage_origin, recommendation, provider="
                 row = rows[0]
                 evidence["dispatchId"] = row["id"]
                 if row.get("status") in ("FAILED", "TIMEOUT", "CANCELLED"):
+                    if provider == "opencode" and row.get("error") in (
+                            "OPENCODE_TURN_FAILED", "OPENCODE_VERSION_UNSUPPORTED",
+                            "EXECUTOR_CLI_ABORTED", "EXECUTOR_CLI_FAILED",
+                            "EXECUTOR_CLI_NOT_FOUND", "EXECUTOR_CLI_OUTPUT_INVALID",
+                            "EXECUTOR_CLI_OUTPUT_TOO_LARGE", "EXECUTOR_CLI_START_FAILED",
+                            "EXECUTOR_TASK_FAILED", "ARTIFACT_UPLOAD_FAILED",
+                            "CAPSULE_DOWNLOAD_FAILED", "CAPSULE_SIGNATURE_INVALID"):
+                        evidence["runtimeFailureCode"] = row["error"]
+                        print(f"RUNTIME_FAILURE_CODE={row['error']}", flush=True)
                     raise CheckFailure("DISPATCH_TERMINAL_FAILURE")
                 return row if row.get("status") == "SUCCEEDED" else None
             dispatch = wait_for(completed, 360, "DISPATCH_TIMEOUT")
@@ -540,6 +595,23 @@ def require_provider_cli(provider):
     binary = shutil.which(provider)
     if not binary:
         raise CheckFailure(f"{label}_CLI_REQUIRED")
+    if provider == "opencode":
+        env = {"PATH": os.environ.get("PATH", ""), **opencode_environment()}
+        try:
+            with tempfile.TemporaryDirectory(prefix="opencode-preflight-") as directory:
+                env.update(HOME=directory, TMPDIR=directory)
+                version = subprocess.run([binary, "--version"], env=env, cwd=directory,
+                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                    text=True, timeout=20)
+                match = re.fullmatch(r"(?:opencode\s+)?v?(\d+)\.(\d+)\.(\d+)",
+                                     version.stdout.strip(), re.IGNORECASE)
+                if version.returncode or not match:
+                    raise CheckFailure("OPENCODE_CLI_VERSION_INVALID")
+                if tuple(map(int, match.groups())) < OPENCODE_MIN_VERSION:
+                    raise CheckFailure("OPENCODE_VERSION_UNSUPPORTED")
+        except (OSError, subprocess.TimeoutExpired):
+            raise CheckFailure("OPENCODE_CLI_VERSION_INVALID") from None
+        return
     if provider == "claude" and claude_gateway_configured():
         return
     configured_home = os.environ.get(f"AW_E2E_{label}_HOME", "")

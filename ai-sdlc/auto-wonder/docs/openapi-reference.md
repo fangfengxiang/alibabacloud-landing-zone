@@ -407,7 +407,7 @@ dispatch / conversation Token 仍锁定在自身工作空间：省略 `workspace
 // Response: IssuedExecutorVO (含 token，仅创建时可见)
 ```
 
-支持的类型为 `QODER_CLI`、`QODER_CN_CLI`、`CLAUDE_CODE`、`CODEX_CLI`。
+支持的类型为 `QODER_CLI`、`QODER_CN_CLI`、`CLAUDE_CODE`、`CODEX_CLI`、`OPENCODE_CLI`。
 
 ---
 

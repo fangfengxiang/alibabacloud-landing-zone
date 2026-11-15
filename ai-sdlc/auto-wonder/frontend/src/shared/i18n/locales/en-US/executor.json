@@ -1,6 +1,12 @@
 {
   "clientClaudeCode": "Claude Code",
   "clientCodexCli": "Codex CLI",
+  "clientOpenCode": "OpenCode",
+  "cliModel": "CLI model",
+  "cliModelHelp": "Enter a model ID configured on the executor. OpenCode uses provider/model with an optional #variant. Leave blank to use the CLI default.",
+  "cliDefault": "CLI default",
+  "clientTestedVersionLabel": "Tested version for {{client}}",
+  "clientTestedVersionHelp": "{{client}} was tested with {{version}}. Use this version to reproduce the acceptance environment.",
   "online": "Online",
   "busy": "Busy",
   "offline": "Offline",

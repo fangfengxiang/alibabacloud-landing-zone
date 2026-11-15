@@ -1,6 +1,7 @@
 package com.aliyun.autowonder.executor;
 
 import com.aliyun.autowonder.common.error.BizException;
+import com.aliyun.autowonder.common.error.ErrorCode;
 import com.aliyun.autowonder.executor.dto.CreateExecutorRequest;
 import com.aliyun.autowonder.executor.dto.ExecutorLaunchConfigVO;
 import com.aliyun.autowonder.executor.dto.ProviderModelCatalogItemVO;
@@ -186,6 +187,31 @@ class ExecutorLaunchConfigServiceTest {
         assertEquals(5, saved.getVersion());
     }
 
+    @ParameterizedTest
+    @CsvSource({"CLAUDE_CODE, glm-5.3, high", "CODEX_CLI, gpt-5.4, xhigh", "OPENCODE_CLI, bailian/glm-5.3#high,"})
+    void bundledLaunchConfigPersistsOptionalNativeSettings(String kind, String model, String effort) {
+        ExecutorDO row = executor(9L, kind, "{\"memoryMode\":\"none\"}", 1);
+        when(executorDao.findById(9L)).thenReturn(row);
+        when(executorDao.updateLaunchConfig(eq(9L), eq(TENANT), anyString(), eq(1), eq(USER))).thenAnswer(call -> {
+            row.setLaunchConfig(call.getArgument(2));
+            return 1;
+        });
+
+        var saved = service.updateConfig(9L, TENANT, req(1, "none", model, effort, null), USER);
+        assertEquals(model, saved.getModel());
+        assertEquals(effort, saved.getReasoningEffort());
+        assertNull(saved.getContextWindow());
+        assertEquals(model, service.requireCompleteConfig(9L, TENANT).model);
+
+        var invalidPin = req(1, "none", null, null, null);
+        invalidPin.setRuntimeVersion("0.3.43");
+        assertThrows(BizException.class, () -> service.previewConfig(9L, TENANT, invalidPin));
+        assertThrows(BizException.class, () -> service.previewConfig(9L, TENANT,
+                req(1, "none", model, effort, "260000")));
+        assertEquals(ErrorCode.PARAM_INVALID.getCode(), assertThrows(BizException.class,
+                () -> service.previewConfig(9L, TENANT, req(1, "none", model + "#", effort, null))).getCode());
+    }
+
     @Test void applyRequiresTheSavedVersionFromTheSameExecutorSnapshot() {
         when(executorDao.findById(9L)).thenReturn(executor(9L, "CLAUDE_CODE", "{\"memoryMode\":\"platform\"}", 4));
         assertThrows(BizException.class, () -> service.requireCompleteConfig(9L, TENANT, 3));
@@ -297,10 +323,11 @@ class ExecutorLaunchConfigServiceTest {
         assertEquals(1, vo.getVersion());
     }
 
-    @Test
-    void readStoredConfig_returns_only_memory_mode_for_a_non_qoder_executor() {
-        when(executorDao.findById(9L)).thenReturn(executor(9L, "CODEX_CLI",
-                "{\"model\":\"qmodel_38max\",\"memoryMode\":\"provider-local\"}", 2));
+    @ParameterizedTest
+    @CsvSource({"CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"})
+    void readStoredConfig_preserves_legacy_memory_only_config_for_a_bundled_executor(String clientKind) {
+        when(executorDao.findById(9L)).thenReturn(executor(9L, clientKind,
+                "{\"memoryMode\":\"provider-local\"}", 2));
 
         ExecutorLaunchConfigVO vo = service.readStoredConfig(9L, TENANT);
 
@@ -380,12 +407,12 @@ class ExecutorLaunchConfigServiceTest {
     }
 
     @Test
-    void updateConfig_stores_only_memory_mode_for_a_non_qoder_executor() {
+    void updateConfig_stores_memory_without_optional_native_settings() {
         when(executorDao.findById(9L)).thenReturn(executor(9L, "CLAUDE_CODE", null, 1));
         when(executorDao.updateLaunchConfig(eq(9L), eq(TENANT), anyString(), eq(1), eq(USER))).thenReturn(1);
 
         ExecutorLaunchConfigVO vo = service.updateConfig(9L, TENANT,
-                req(1, "none", "qmodel_38max", "low", "400000"), USER);
+                req(1, "none", null, null, null), USER);
 
         assertNull(vo.getModel());
         assertEquals("none", vo.getMemoryMode());
@@ -462,7 +489,7 @@ class ExecutorLaunchConfigServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI"})
+    @CsvSource({"claude_code, CLAUDE_CODE", "codex_cli, CODEX_CLI", "opencode_cli, OPENCODE_CLI"})
     void updateConfig_recoversLocalCliWithoutQoderModelSettings(String requestedKind, String clientKind) {
         when(executorDao.findById(9L)).thenReturn(executor(9L, null, null, 1));
         when(executorDao.updateLaunchConfigWithClientKind(eq(9L), eq(TENANT), anyString(), eq(clientKind),
@@ -642,9 +669,9 @@ class ExecutorLaunchConfigServiceTest {
     }
 
     @Test
-    void resolveForCreate_stores_only_memory_mode_for_a_non_qoder_client_kind() {
+    void resolveForCreate_stores_memory_without_optional_native_settings() {
         ExecutorLaunchConfigService.LaunchConfig config =
-                service.resolveForCreate(TENANT, create("CLAUDE_CODE", "provider-local", "lite", "low", "400000"));
+                service.resolveForCreate(TENANT, create("CLAUDE_CODE", "provider-local", null, null, null));
 
         assertEquals("provider-local", config.memoryMode);
         assertNull(config.model);

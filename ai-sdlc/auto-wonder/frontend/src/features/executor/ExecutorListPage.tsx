@@ -9,7 +9,7 @@ import { RobotHeadIcon } from '@/shared/ui/RobotHeadIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, Tag, Badge, Button, Space, Modal, Form, Input, InputNumber, Select, message, Popconfirm, Alert, Typography, Dropdown, Tooltip, Segmented, Collapse, Drawer, Descriptions } from 'antd';
 import { Table } from '@/shared/theme/ThemedTable';
-import { PlusOutlined, DeleteOutlined, CopyOutlined, CheckCircleFilled, CloseCircleFilled, InfoCircleFilled, CodeOutlined, EyeOutlined, EyeInvisibleOutlined, CodeSandboxOutlined, DownOutlined, BugOutlined, TeamOutlined, CloudUploadOutlined, LinkOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, CopyOutlined, CheckCircleFilled, CloseCircleFilled, InfoCircleFilled, CodeOutlined, EyeOutlined, EyeInvisibleOutlined, CodeSandboxOutlined, DownOutlined, BugOutlined, TeamOutlined, CloudUploadOutlined, LinkOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   listExecutors, createExecutor, deleteExecutor, getExecutorToken, getExecutorModelCatalog, restartExecutor,
@@ -25,7 +25,7 @@ import { groupBySquad, type SquadGroup } from '@/features/squad/squadGrouping';
 import { Link, useSearchParams } from 'react-router-dom';
 import { formatAgentSquadLabel } from './agentSquadLabel';
 import { buildExecutorAgentGroups, type ExecutorAgentGroup } from './executorAgentGroups';
-import type { ExecutorVO, IssuedExecutorVO, ExecutorLaunchConfig, ExecutorUpdateVO, ExecutorUpdateAllResultVO, ExecutorUpdateSkipVO } from './api';
+import type { ExecutorVO, IssuedExecutorVO, ExecutorLaunchConfig, ExecutorUpdateVO, ExecutorUpdateAllResultVO, ExecutorUpdateSkipVO, UpdateExecutorLaunchConfigRequest } from './api';
 import type { DebugShell, StartupOs } from './api';
 import { ApiError } from '@/shared/types/common';
 import type { ColumnsType } from 'antd/es/table';
@@ -47,7 +47,8 @@ type ClientKindOption = {
   value: string;
   color: string;
   Icon: typeof CodeOutlined | typeof RobotHeadIcon;
-} & ({ label: string } | { labelKey: 'clientClaudeCode' | 'clientCodexCli' });
+  testedVersion?: string;
+} & ({ label: string } | { labelKey: 'clientClaudeCode' | 'clientCodexCli' | 'clientOpenCode' });
 
 function clientKindLabel(option: ClientKindOption, t: TFunction<'executor'>): string {
   return 'labelKey' in option ? t(option.labelKey) : option.label;
@@ -56,8 +57,9 @@ function clientKindLabel(option: ClientKindOption, t: TFunction<'executor'>): st
 const CLIENT_KINDS: ClientKindOption[] = [
   { value: 'QODER_CN_CLI', label: 'Qoder CLI CN', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
   { value: 'QODER_CLI', label: 'Qoder CLI', color: 'var(--aw-accent-text)', Icon: CodeOutlined },
-  { value: 'CLAUDE_CODE', labelKey: 'clientClaudeCode', color: '#d4380d', Icon: RobotHeadIcon },
-  { value: 'CODEX_CLI', labelKey: 'clientCodexCli', color: '#13a8a8', Icon: CodeSandboxOutlined },
+  { value: 'CLAUDE_CODE', labelKey: 'clientClaudeCode', testedVersion: '2.1.311', color: '#d4380d', Icon: RobotHeadIcon },
+  { value: 'CODEX_CLI', labelKey: 'clientCodexCli', testedVersion: '0.167.0-alpha.4.1', color: '#13a8a8', Icon: CodeSandboxOutlined },
+  { value: 'OPENCODE_CLI', labelKey: 'clientOpenCode', testedVersion: '2.2.7', color: 'var(--aw-text)', Icon: CodeOutlined },
   { value: 'CURSOR_CLI', label: 'Cursor CLI', color: 'var(--aw-text)', Icon: CodeSandboxOutlined },
 ];
 
@@ -74,8 +76,50 @@ export function isClientKindMissing(kind?: string | null): boolean {
 
 // 新建和补录共享可选类型。
 export const CREATABLE_CLIENT_KINDS = CLIENT_KINDS.filter(({ value }) =>
-  isQoderClientKind(value) || value === 'CLAUDE_CODE' || value === 'CODEX_CLI',
+  isQoderClientKind(value) || value === 'CLAUDE_CODE' || value === 'CODEX_CLI' || value === 'OPENCODE_CLI',
 );
+
+const CLI_REASONING_EFFORTS: Readonly<Record<string, readonly string[]>> = {
+  CLAUDE_CODE: ['low', 'medium', 'high', 'xhigh', 'max'],
+  CODEX_CLI: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'],
+};
+
+function isBundledClientKind(kind?: string | null): boolean {
+  return kind === 'CLAUDE_CODE' || kind === 'CODEX_CLI' || kind === 'OPENCODE_CLI';
+}
+
+function localCliLaunchFields(kind: string | null | undefined, values: {
+  cliModel?: string;
+  cliReasoningEffort?: string;
+}, saved?: ExecutorLaunchConfig) {
+  if (!isBundledClientKind(kind)) return {};
+  const model = values.cliModel?.trim() ?? '';
+  const selectedEffort = values.cliReasoningEffort ?? '';
+  const reasoningEffort = CLI_REASONING_EFFORTS[kind ?? '']?.includes(selectedEffort) ? selectedEffort : '';
+  return {
+    ...(model || saved?.model ? { model } : {}),
+    ...(reasoningEffort || saved?.reasoningEffort ? { reasoningEffort } : {}),
+  };
+}
+
+function LocalCliModelFields({ kind }: { kind?: string | null }) {
+  const { t } = useTranslation('executor');
+  if (!isBundledClientKind(kind)) return null;
+  const efforts = CLI_REASONING_EFFORTS[kind ?? ''] ?? [];
+  return (
+    <>
+      <Form.Item label={t('cliModel')} name="cliModel" extra={t('cliModelHelp')} preserve={false}>
+        <Input maxLength={200} />
+      </Form.Item>
+      {efforts.length > 0 && (
+        <Form.Item label={t('reasoning')} name="cliReasoningEffort" preserve={false}>
+          <Select allowClear placeholder={t('cliDefault')}
+            options={efforts.map((effort) => ({ value: effort, label: effort }))} />
+        </Form.Item>
+      )}
+    </>
+  );
+}
 
 const EXECUTORS_VIEW_STORAGE_KEY = 'autowonder.executors.view';
 const EXECUTORS_VIEW_OPTIONS = ['agent', 'squad'] as const;
@@ -249,6 +293,18 @@ function CommandPreview({ text }: { text: string }) {
   );
 }
 
+function ClientVersionHelp({ option }: { option?: ClientKindOption }) {
+  const { t } = useTranslation('executor');
+  if (!option?.testedVersion) return null;
+  const details = { client: clientKindLabel(option, t), version: option.testedVersion };
+  return (
+    <Tooltip title={t('clientTestedVersionHelp', details)} trigger={['hover', 'focus', 'click']}>
+      <Button type="text" size="small" aria-label={t('clientTestedVersionLabel', details)}
+        icon={<QuestionCircleOutlined aria-hidden="true" />} />
+    </Tooltip>
+  );
+}
+
 function ClientKindSelect({ value, onChange }: { value?: string; onChange?: (v: string) => void }) {
   const { t } = useTranslation('executor');
   return (
@@ -257,34 +313,40 @@ function ClientKindSelect({ value, onChange }: { value?: string; onChange?: (v: 
         const { value: v, color, Icon } = option;
         const selected = value === v;
         return (
-          <button
-            type="button"
-            aria-pressed={selected}
-            key={v}
-            onClick={() => onChange?.(v)}
-            style={{
-              color: 'inherit', font: 'inherit', textAlign: 'left',
-              flex: '1 1 150px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '12px 16px',
-              border: `2px solid ${selected ? 'var(--aw-accent-text)' : 'var(--aw-border)'}`,
-              borderRadius: 8,
-              cursor: 'pointer',
-              background: selected ? 'rgba(var(--aw-accent-rgb), .10)' : 'var(--aw-panel)',
-              transition: 'all 0.2s',
-              position: 'relative',
-            }}
-          >
-            <span style={{ fontSize: 24, color }}><Icon aria-hidden="true" /></span>
-            <span style={{ fontWeight: 500 }}>{clientKindLabel(option, t)}</span>
-            {selected && (
-              <CheckCircleFilled aria-hidden="true"
-                style={{ position: 'absolute', top: 8, right: 8, color: 'var(--aw-accent-text)', fontSize: 16 }}
-              />
+          <div key={v} style={{ flex: '1 1 150px', position: 'relative' }}>
+            <button
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onChange?.(v)}
+              style={{
+                color: 'inherit', font: 'inherit', textAlign: 'left',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: option.testedVersion ? '12px 40px 12px 16px' : '12px 16px',
+                border: `2px solid ${selected ? 'var(--aw-accent-text)' : 'var(--aw-border)'}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                background: selected ? 'rgba(var(--aw-accent-rgb), .10)' : 'var(--aw-panel)',
+                transition: 'all 0.2s',
+                position: 'relative',
+              }}
+            >
+              <span style={{ fontSize: 24, color }}><Icon aria-hidden="true" /></span>
+              <span style={{ fontWeight: 500 }}>{clientKindLabel(option, t)}</span>
+              {selected && (
+                <CheckCircleFilled aria-hidden="true"
+                  style={{ position: 'absolute', top: 8, right: option.testedVersion ? 32 : 8, color: 'var(--aw-accent-text)', fontSize: 16 }}
+                />
+              )}
+            </button>
+            {option.testedVersion && (
+              <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)' }}>
+                <ClientVersionHelp option={option} />
+              </span>
             )}
-          </button>
+          </div>
         );
       })}
     </div>
@@ -335,6 +397,8 @@ interface CreateExecutorFormValues {
   model?: string;
   reasoningEffort?: string;
   contextWindow?: string;
+  cliModel?: string;
+  cliReasoningEffort?: string;
 }
 
 interface StartupFormValues {
@@ -345,6 +409,23 @@ interface StartupFormValues {
   model?: string;
   reasoningEffort?: string;
   contextWindow?: string;
+  cliModel?: string;
+  cliReasoningEffort?: string;
+}
+
+function startupFormFields(config: ExecutorLaunchConfig, kind?: string | null): Partial<StartupFormValues> {
+  return {
+    memoryMode: config.memoryMode ?? 'platform',
+    maxConcurrentDispatches: config.maxConcurrentDispatches ?? 5,
+    ...(isQoderClientKind(kind) ? {
+      model: config.model ?? undefined,
+      reasoningEffort: config.reasoningEffort ?? undefined,
+      contextWindow: config.contextWindow ?? undefined,
+    } : {
+      cliModel: config.model ?? undefined,
+      cliReasoningEffort: config.reasoningEffort ?? undefined,
+    }),
+  };
 }
 
 export function ExecutorListPage() {
@@ -401,9 +482,8 @@ export function ExecutorListPage() {
   // 历史缺类型执行器的模型参数由补选的表单类型驱动；正常执行器仍用列表记录里的类型
   const startupKindMissing = isClientKindMissing(startupTarget?.clientKind);
   const startupFormClientKind = Form.useWatch('clientKind', startupForm);
-  const startupQoderProvider = qoderProviderForClientKind(
-    startupKindMissing ? startupFormClientKind : startupTarget?.clientKind,
-  );
+  const startupClientKind = startupKindMissing ? startupFormClientKind : startupTarget?.clientKind;
+  const startupQoderProvider = qoderProviderForClientKind(startupClientKind);
   const createQoderProvider = createModalOpen ? qoderProviderForClientKind(clientKind) : undefined;
 
   const qoderCatalogQuery = useQuery({
@@ -631,10 +711,10 @@ export function ExecutorListPage() {
       model: startupFormValues.model,
       reasoningEffort: startupFormValues.reasoningEffort,
       contextWindow: startupFormValues.contextWindow,
-    } : {}),
+    } : localCliLaunchFields(startupClientKind, startupFormValues, startupConfig)),
   } : null;
   const startupSavedValues = { ...startupConfig, maxConcurrentDispatches: startupConfig?.maxConcurrentDispatches ?? 5 };
-  const startupPreviewConfig = startupDraftValues && Object.entries(startupDraftValues)
+  const startupPreviewConfig: UpdateExecutorLaunchConfigRequest | null = startupDraftValues && Object.entries(startupDraftValues)
     .some(([key, value]) => value !== startupSavedValues[key as keyof typeof startupSavedValues])
     ? { ...startupDraftValues, version: startupConfig!.version } : null;
   const startupPreviewValid = !startupPreviewConfig || Boolean(startupPreviewConfig.memoryMode
@@ -662,12 +742,13 @@ export function ExecutorListPage() {
 
   const createMut = useMutation({
     // 启动配置随执行器一并落库，响应回显的就是数据库保存下来的值
-    mutationFn: ({ agentId, name, clientKind: kind, memoryMode, maxConcurrentDispatches, model, reasoningEffort, contextWindow }:
-      CreateExecutorFormValues) =>
-      createExecutor(agentId, {
+    mutationFn: (values: CreateExecutorFormValues) => {
+      const { agentId, name, clientKind: kind, memoryMode, maxConcurrentDispatches, model, reasoningEffort, contextWindow } = values;
+      return createExecutor(agentId, {
         name, clientKind: kind, memoryMode, maxConcurrentDispatches,
-        ...(isQoderClientKind(kind) ? { model, reasoningEffort, contextWindow } : {}),
-      }),
+        ...(isQoderClientKind(kind) ? { model, reasoningEffort, contextWindow } : localCliLaunchFields(kind, values)),
+      });
+    },
     onSuccess: (data) => {
       setTokenResult(data);
       setCreateModalOpen(false);
@@ -814,17 +895,9 @@ export function ExecutorListPage() {
     setStartupConfig(config);
     if (!fillForm) return config;
     if (!isLaunchConfigured(config)) return config;
+    startupForm.setFieldsValue(startupFormFields(config, record.clientKind));
     if (isQoderClientKind(record.clientKind)) {
-      startupForm.setFieldsValue({
-        memoryMode: config.memoryMode ?? 'platform',
-        maxConcurrentDispatches: config.maxConcurrentDispatches ?? 5,
-        model: config.model ?? undefined,
-        reasoningEffort: config.reasoningEffort ?? undefined,
-        contextWindow: config.contextWindow ?? undefined,
-      });
       setStartupModelInvalid(!config.model);
-    } else {
-      startupForm.setFieldsValue({ memoryMode: config.memoryMode ?? 'platform', maxConcurrentDispatches: config.maxConcurrentDispatches ?? 5 });
     }
     return config;
   };
@@ -877,7 +950,7 @@ export function ExecutorListPage() {
           model: values.model,
           reasoningEffort: values.reasoningEffort,
           contextWindow: values.contextWindow,
-        } : {}),
+        } : localCliLaunchFields(effectiveKind, values, kindMissing ? undefined : config)),
         version,
       });
       setStartupConfig(saved);
@@ -895,7 +968,7 @@ export function ExecutorListPage() {
         message.error(i18n.t('executor:configChanged'));
         // 同步最新配置与版本号，用户可以直接重试；表单里刚选的值保持不动
         await loadStartupConfig(record, false);
-      } else if (error instanceof ApiError && error.code === '17006') {
+      } else if (isQoder && error instanceof ApiError && error.code === '17006') {
         // 选择的模型已下线：置空并提示重新选择，不自动回退默认值
         setStartupModelInvalid(true);
         startupForm.setFieldsValue({ model: undefined });
@@ -934,11 +1007,7 @@ export function ExecutorListPage() {
         setStartupConfigError(null);
         setStartupModelInvalid(false);
         setCommandRequest(null);
-        startupForm.setFieldsValue({
-          memoryMode: saved.memoryMode, maxConcurrentDispatches: saved.maxConcurrentDispatches ?? 5,
-          model: saved.model ?? undefined, reasoningEffort: saved.reasoningEffort ?? undefined,
-          contextWindow: saved.contextWindow ?? undefined,
-        });
+        startupForm.setFieldsValue(startupFormFields(saved, startupTarget.clientKind));
         await queryClient.invalidateQueries({ queryKey: ['executor-launch-command', startupTarget.id] });
         setCommandDraft(null);
         message.success(i18n.t('executor:commandSaved'));
@@ -1312,6 +1381,7 @@ export function ExecutorListPage() {
               { value: 'none', label: t('noMemory') },
             ]} />
           </Form.Item>
+          <LocalCliModelFields key={clientKind} kind={clientKind} />
           {isQoderClientKind(clientKind) && (
             <>
               <Form.Item label={t('qoderModel')} name="model" rules={[{ required: true, message: t('selectModel') }]}>
@@ -1374,7 +1444,7 @@ export function ExecutorListPage() {
           {startupKindMissing && (
             <Form.Item label={t('clientKind')} name="clientKind"
               rules={[{ required: true, message: t('selectClient') }]}
-              extra={t('missingKindExtra')}>
+              extra={<Space size={4}>{t('missingKindExtra')}<ClientVersionHelp option={clientKindMap[startupFormClientKind ?? '']} /></Space>}>
               <Select options={CREATABLE_CLIENT_KINDS.map((option) => ({ value: option.value, label: clientKindLabel(option, t) }))} />
             </Form.Item>
           )}
@@ -1390,6 +1460,7 @@ export function ExecutorListPage() {
               { value: 'none', label: t('noMemory') },
             ]} />
           </Form.Item>
+          <LocalCliModelFields key={startupClientKind} kind={startupClientKind} />
           {Boolean(startupQoderProvider) && (
             <>
               <Form.Item label={t('qoderModel')} name="model" rules={[{ required: true, message: t('required') }]}>

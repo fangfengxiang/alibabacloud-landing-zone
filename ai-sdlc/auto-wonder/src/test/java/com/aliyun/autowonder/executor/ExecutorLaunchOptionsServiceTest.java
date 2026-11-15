@@ -136,7 +136,7 @@ class ExecutorLaunchOptionsServiceTest {
             BizException ex = assertThrows(BizException.class, () -> service.launchOptions(WORKSPACE, clientKind),
                     String.valueOf(clientKind));
             assertEquals("27003", ex.getCode(), String.valueOf(clientKind));
-            assertTrue(ex.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI"), ex.getMessage());
+            assertTrue(ex.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI/OPENCODE_CLI"), ex.getMessage());
         }
         verify(modelCatalogService, never()).read(anyLong(), anyString());
     }
@@ -157,8 +157,8 @@ class ExecutorLaunchOptionsServiceTest {
 
     @Test
     void creatableClientKindsIncludeLocalCliProviders() {
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI"), ExecutorLaunchOptionsService.creatableClientKindValues());
-        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI"),
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"), ExecutorLaunchOptionsService.creatableClientKindValues());
+        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI", "OpenCode"),
                 ExecutorLaunchOptionsService.creatableClientKinds().stream()
                         .map(SelectOptionVO::getLabel).toList());
         assertEquals("国际版 Qoder CLI 执行器",
@@ -166,7 +166,7 @@ class ExecutorLaunchOptionsServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"claude_code, CLAUDE_CODE, claude", "codex_cli, CODEX_CLI, codex"})
+    @CsvSource({"claude_code, CLAUDE_CODE, claude", "codex_cli, CODEX_CLI, codex", "opencode_cli, OPENCODE_CLI, opencode"})
     void launchOptionsUseLocalModelSettings(String requestedKind, String clientKind, String provider) {
         ExecutorLaunchOptionsVO vo = service.launchOptions(WORKSPACE, requestedKind);
 
@@ -174,7 +174,11 @@ class ExecutorLaunchOptionsServiceTest {
         assertEquals(provider, vo.getProvider());
         assertEquals("platform", vo.getDefaultMemoryMode());
         assertTrue(vo.getModels().isEmpty());
-        assertTrue(vo.getReasoningEfforts().isEmpty());
+        assertEquals(switch (provider) {
+            case "claude" -> List.of("low", "medium", "high", "xhigh", "max");
+            case "codex" -> List.of("none", "minimal", "low", "medium", "high", "xhigh");
+            default -> List.of();
+        }, values(vo.getReasoningEfforts()));
         assertTrue(vo.getContextWindows().isEmpty());
         assertNull(vo.getDefaultModel());
         assertNull(vo.getDefaultCreateModel());
@@ -197,6 +201,7 @@ class ExecutorLaunchOptionsServiceTest {
         assertEquals("qodercn", ExecutorLaunchOptionsService.resolveProvider("QODER_CN_CLI"));
         assertEquals("claude", ExecutorLaunchOptionsService.resolveProvider("CLAUDE_CODE"));
         assertEquals("codex", ExecutorLaunchOptionsService.resolveProvider("CODEX_CLI"));
+        assertEquals("opencode", ExecutorLaunchOptionsService.resolveProvider("OPENCODE_CLI"));
         assertEquals("cursor", ExecutorLaunchOptionsService.resolveProvider("CURSOR_CLI"));
         assertEquals("claude", ExecutorLaunchOptionsService.resolveProvider("UNKNOWN"));
         assertEquals("claude", ExecutorLaunchOptionsService.resolveProvider(null));

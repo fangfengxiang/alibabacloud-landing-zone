@@ -5594,7 +5594,7 @@ class McpToolServiceTest {
         assertEquals(List.of("workspaceId", "agentId", "name", "clientKind"),
                 schemaFor("autowonder.create_executor").get("required"));
 
-        List<String> clientKinds = List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI");
+        List<String> clientKinds = List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI");
         assertEquals(clientKinds, enumValues("autowonder.create_executor", "clientKind"));
         assertEquals(clientKinds, enumValues("autowonder.get_executor_launch_options", "clientKind"));
         // 历史缺类型执行器的恢复入口与创建入口共用同一套可创建类型枚举
@@ -5603,11 +5603,13 @@ class McpToolServiceTest {
         for (String tool : List.of("autowonder.create_executor",
                 "autowonder.update_executor_launch_config")) {
             assertEquals(memoryModes, enumValues(tool, "memoryMode"), tool);
-            assertEquals(List.of("max", "xhigh", "high", "medium", "low", "none"),
-                    enumValues(tool, "reasoningEffort"), tool);
             assertEquals(List.of("1000000", "400000", "260000"),
                     enumValues(tool, "contextWindow"), tool);
         }
+        assertEquals(List.of("max", "xhigh", "high", "medium", "low", "none", "minimal"),
+                enumValues("autowonder.create_executor", "reasoningEffort"));
+        assertEquals(List.of("max", "xhigh", "high", "medium", "low", "none", "minimal", ""),
+                enumValues("autowonder.update_executor_launch_config", "reasoningEffort"));
         // 生成命令只保留输出格式选项：启动值一律来自数据库配置，不接受入参覆盖
         Map<String, Object> buildProperties = properties(schemaFor("autowonder.build_executor_launch_command"));
         assertEquals(Set.of("workspaceId", "id", "os", "debug", "shell"), buildProperties.keySet());
@@ -5854,9 +5856,9 @@ class McpToolServiceTest {
         List<SelectOptionVO> kinds =
                 (List<SelectOptionVO>) call(principal, "autowonder.list_executor_client_kinds", Map.of());
 
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI"),
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"),
                 kinds.stream().map(SelectOptionVO::getValue).toList());
-        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI"),
+        assertEquals(List.of("Qoder CLI", "Qoder CLI CN", "Claude Code", "Codex CLI", "OpenCode"),
                 kinds.stream().map(SelectOptionVO::getLabel).toList());
         verifyNoInteractions(executorService);
     }
@@ -5893,7 +5895,7 @@ class McpToolServiceTest {
                 "autowonder.get_executor_launch_options", Map.of("clientKind", "CURSOR_CLI")));
 
         assertEquals("27003", exception.getCode());
-        assertTrue(exception.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI"));
+        assertTrue(exception.getMessage().contains("clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI/OPENCODE_CLI"));
         verifyNoInteractions(providerModelCatalogService);
     }
 
@@ -5930,7 +5932,7 @@ class McpToolServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CLAUDE_CODE", "CODEX_CLI"})
+    @CsvSource({"CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"})
     void createsLocalCliExecutorWithNullableModelFieldsInThePublishedSchema(String clientKind) {
         McpAccessTokenService.Principal admin = principal(WorkspaceAccessLevel.ADMIN);
         when(executorService.create(eq(5L), any(CreateExecutorRequest.class), eq(WORKSPACE_ID), eq(USER_ID)))
@@ -6366,7 +6368,7 @@ class McpToolServiceTest {
 
         List<SelectOptionVO> kinds =
                 (List<SelectOptionVO>) call(admin, "autowonder.list_executor_client_kinds", Map.of());
-        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI"),
+        assertEquals(List.of("QODER_CLI", "QODER_CN_CLI", "CLAUDE_CODE", "CODEX_CLI", "OPENCODE_CLI"),
                 kinds.stream().map(SelectOptionVO::getValue).toList());
     }
 

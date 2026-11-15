@@ -41,8 +41,8 @@ ORDER BY tenant_id, id;
 ## 二、页面恢复操作步骤
 
 1. 进入「执行器管理」列表，找到受影响执行器（如「标准小队-项目经理执行器」），打开其「启动命令」弹窗。
-2. 弹窗会显示醒目警告：该执行器缺少客户端类型，并出现必选的「客户端类型」下拉（Qoder / Qoder CN / Claude Code / Codex CLI）。
-3. 按执行器实际接入的 CLI 选择类型。Qoder 提供模型、推理力度和上下文窗口，Claude Code 和 Codex CLI 使用执行机上的 CLI 模型配置。各类型均可调整记忆模式。
+2. 弹窗会显示醒目警告：该执行器缺少客户端类型，并出现必选的「客户端类型」下拉（Qoder / Qoder CN / Claude Code / Codex CLI / OpenCode）。
+3. 按执行器实际接入的 CLI 选择类型。Qoder 提供模型、推理力度和上下文窗口，Claude Code、Codex CLI 和 OpenCode 使用执行机上的 CLI 模型配置。各类型均可调整记忆模式。
 4. 点击保存。保存会在同一次写入中把补选的 `client_kind` 与启动参数一并落库（带乐观锁 `config_version` 校验，并发下后写者会收到 17005，刷新重试即可）。
 5. 保存成功后弹窗内警告消失、列表刷新；普通和 Debug 启动命令均可预览与复制，对应的 provider 为 `qoder`、`qodercn`、`claude` 或 `codex`。
 
@@ -53,7 +53,7 @@ ORDER BY tenant_id, id;
 | 错误码 | 含义 | 处理 |
 |---|---|---|
 | 17011 | 执行器缺少客户端类型 | 在启动命令弹窗补选类型后保存 |
-| 17009 | 客户端类型不合法（支持 QODER_CLI、QODER_CN_CLI、CLAUDE_CODE、CODEX_CLI） | 从下拉中选择，勿手输其他值 |
+| 17009 | 客户端类型不合法（支持 QODER_CLI、QODER_CN_CLI、CLAUDE_CODE、CODEX_CLI、OPENCODE_CLI） | 从下拉中选择，勿手输其他值 |
 | 17007 | 启动配置不完整 | 在同一弹窗补齐模型等参数后保存 |
 | 17005 | 启动配置已被修改（乐观锁冲突） | 刷新后重试保存 |
 | 10001 | 执行器已有客户端类型，不允许通过启动配置修改 | 如确需变更，走 DBA 人工变更流程 |

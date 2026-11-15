@@ -74,7 +74,8 @@ class ExecutorI18nBoundaryTest {
                 "reasoningEffort 仅支持 max/xhigh/high/medium/low/none", "reasoningEffort only supports max/xhigh/high/medium/low/none.");
         for (ErrorCode code : List.of(ErrorCode.EXECUTOR_CLIENT_KIND_INVALID, ErrorCode.MCP_TOOL_ARGUMENT_INVALID)) {
             boundary(() -> ExecutorLaunchOptionsService.requireCreatableClientKind("CURSOR_CLI", code), code.getCode(), 200,
-                    "clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI", "clientKind only supports QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI.");
+                    "clientKind 仅支持 QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI/OPENCODE_CLI",
+                    "clientKind only supports QODER_CLI/QODER_CN_CLI/CLAUDE_CODE/CODEX_CLI/OPENCODE_CLI.");
         }
     }
 
@@ -86,11 +87,13 @@ class ExecutorI18nBoundaryTest {
         assertEquals("自动（默认）", chinese.getModels().get(0).getLabel());
         assertEquals("极高", chinese.getReasoningEfforts().get(1).getLabel());
         assertEquals("国际版 Qoder CLI 执行器", ExecutorLaunchOptionsService.creatableClientKinds().get(0).getDescription());
+        assertEquals("OpenCode 执行器", ExecutorLaunchOptionsService.creatableClientKinds().getLast().getDescription());
         LocaleContextHolder.setLocale(Locale.US);
         var english = options.launchOptions(TENANT, "QODER_CLI");
         assertEquals("Platform memory (recommended)", english.getMemoryModes().get(0).getLabel());
         assertEquals("AutoWonder supplies platform memory", english.getMemoryModes().get(0).getDescription());
         assertEquals("International Qoder CLI Executor", ExecutorLaunchOptionsService.creatableClientKinds().get(0).getDescription());
+        assertEquals("OpenCode Executor", ExecutorLaunchOptionsService.creatableClientKinds().getLast().getDescription());
         assertEquals("Auto (default)", english.getModels().get(0).getLabel());
         assertEquals("Qwen3.8-Max", english.getModels().get(5).getLabel());
         assertEquals("1M", english.getContextWindows().get(0).getLabel());

@@ -1,16 +1,16 @@
 # Runtime Usage — AutoWonder 客户端运行时使用指南
 
-AutoWonder 客户端运行时(Runtime)是部署在执行机上的本地执行端,通过 npm 包 `autowonder` 分发,负责连接 AutoWonder 服务端、接收 dispatch 任务并在本机驱动 AI Agent(claude / codex / qoder / qodercn)执行。本文覆盖命令清单、常见用法、以及典型场景问题与现象(QA)。
+AutoWonder 客户端运行时(Runtime)是部署在执行机上的本地执行端,负责连接 AutoWonder 服务端、接收 dispatch 任务并在本机驱动 AI Agent。Qoder 系列通过 npm 包分发，Claude Code、Codex CLI 和 OpenCode 使用平台随版本发布的运行时。本文覆盖命令清单、常见用法、以及典型场景问题与现象(QA)。
 
 ## 1. 环境要求
 
 | 项 | 要求 |
 |---|---|
-| Node.js | `>=16`;使用 qoder / qodercn 时需要 `>=20` |
-| Agent CLI | 至少安装 claude、codex、qodercli 之一;qodercn 需显式指定 |
+| Node.js | 平台内置运行时需要 22 或更新版本，Qoder 系列 npm 运行时需要 20 或更新版本 |
+| Agent CLI | 在执行机安装执行器类型对应的 CLI，即 `claude`、`codex`、`opencode`、`qodercli` 或 Qoder CN 对应的 CLI |
 | 网络 | 可访问服务端 WebSocket 端点(`--ws-url`) |
 
-## 2. 命令清单
+## 2. npm 运行时命令清单
 
 | 命令 | 说明 |
 |---|---|
@@ -29,13 +29,27 @@ npx -y autowonder connect --ws-url wss://autowonder.example.com/ws/executor \
   --token xxx --executor-id 10000 --provider qoder
 ```
 
-### 使用 Codex CLI 或 Claude Code
+### 使用平台内置运行时
 
-在执行机安装 Node.js 22 或更新版本，并配置所选 CLI 的认证。Claude Code 也可使用本机配置的 Anthropic 兼容网关。在平台创建对应类型的执行器，复制并运行页面生成的启动命令。命令会从当前平台下载执行器模块并校验 SHA-256，然后连接调度器。工单执行使用本机 CLI 默认模型，产物通过平台的派发产物接口回传。
+在执行机安装 Node.js 22 或更新版本，并配置 Claude Code、Codex CLI 或 OpenCode 的认证。Claude Code 可以使用本机配置的 Anthropic 兼容网关。OpenCode 需要 2.2.3 或更新版本，使用独立的非交互会话，允许任务目录中的文件读写和搜索。执行器选择器的问号提示展示推荐的实测 CLI 版本。
 
-此路径支持普通工单派发、进度、终态和交付物。检查点恢复、在线升级及对话轮次属于独立协议能力，当前执行器不会声明这些能力。下文的 npm runtime 命令适用于 Qoder 系列。
+在平台创建对应类型的执行器，复制并运行页面生成的启动命令。命令会从当前平台下载执行器模块并校验 SHA-256，然后连接调度器。普通工单的进度、终态和交付物通过平台回传。
 
-## 3. 常用参数
+### 内置运行时参数
+
+模型和推理力度可在创建执行器或启动配置时保存。运行时优先使用派发策略指定的模型，其次使用启动配置中的模型，最后使用本机 CLI 的默认模型配置。省略推理力度时使用 CLI 或模型默认配置。
+
+| 终端 | `--model` | `--reasoning-effort` |
+|---|---|---|
+| Claude Code | 映射到 `claude --model`，使用 Claude 模型标识或网关提供的模型标识 | 映射到 `--effort`，可选 `low`、`medium`、`high`、`xhigh`、`max`，实际档位由模型和网关决定 |
+| Codex CLI | 映射到 `codex exec --model` | 映射到 `model_reasoning_effort`，可选 `none`、`minimal`、`low`、`medium`、`high`、`xhigh`，实际档位由模型决定 |
+| OpenCode | 映射到 `opencode run --model`，使用 `provider/model` 或 `provider/model#variant` | 用模型标识中的 `#variant` 选择 OpenCode 原生变体，启动命令无独立推理力度参数 |
+
+内置运行时的 `--max-tasks` 范围为 1–10，默认 5。`--workspace-root` 也可通过环境变量 `AUTOWONDER_WORKSPACE_ROOT` 设置，默认使用 `~/.autowonder/local-executor/<executor-id>`。每次派发使用独立的任务目录。`--name` 设置平台连接名称，`--debug` 输出连接与任务错误码。模型上下文窗口及网关认证由 CLI 自身配置。完整参数对照、能力边界与实测版本见 [执行器验收与海外版 Qoder 对照](executor-runtime-acceptance.md)。
+
+## 3. npm 运行时常用参数
+
+下表适用于 Qoder 系列及旧版 npm 客户端。平台内置运行时使用上节的参数映射。
 
 | 参数 | 说明 |
 |---|---|
@@ -49,7 +63,7 @@ npx -y autowonder connect --ws-url wss://autowonder.example.com/ws/executor \
 | `--name <name>` | Runtime 名称,默认 provider + executor ID |
 | `--debug` | 将 daemon 与 agent 活动输出到控制台和日志,用于排障 |
 
-## 4. 典型用法
+## 4. npm 运行时典型用法
 
 ### 4.1 连接服务端(执行机常驻)
 
@@ -80,7 +94,7 @@ npx -y autowonder workitem upload --server-url https://autowonder.example.com \
   --workitem-id 50063 --file ./req.md --file ./design.png --json
 ```
 
-## 5. 场景问题与现象(QA)
+## 5. npm 运行时常见问题
 
 ### Q1:Windows 执行机 dispatch 失败,报 `symlink ... A required privilege is not held by the client`
 

@@ -55,8 +55,7 @@ public class ExecutorLaunchConfigService {
         ExecutorDO executor = requireExecutor(id, tenantId);
         LaunchConfig stored = parse(executor.getLaunchConfig());
         int version = versionOf(executor);
-        String provider = ExecutorLaunchOptionsService.resolveProvider(executor.getClientKind());
-        return toVo(stored, version, ExecutorLaunchOptionsService.isQoderFamily(provider));
+        return toVo(stored, version, executor.getClientKind());
     }
 
     /**
@@ -76,8 +75,8 @@ public class ExecutorLaunchConfigService {
         }
         int expectedVersion = req.getVersion();
         String kindToPersist = resolveRecoveryClientKind(executor.getClientKind(), req.getClientKind());
-        LaunchConfig stored = resolveUpdatedConfig(tenantId, executor, req,
-                kindToPersist != null ? kindToPersist : executor.getClientKind());
+        String clientKind = kindToPersist != null ? kindToPersist : executor.getClientKind();
+        LaunchConfig stored = resolveUpdatedConfig(tenantId, executor, req, clientKind);
         int rows = kindToPersist != null
                 ? executorDao.updateLaunchConfigWithClientKind(id, tenantId, toJson(stored), kindToPersist,
                         expectedVersion, userId)
@@ -85,8 +84,7 @@ public class ExecutorLaunchConfigService {
         if (rows == 0) {
             throw new BizException(ErrorCode.EXECUTOR_LAUNCH_CONFIG_VERSION_CONFLICT);
         }
-        return toVo(stored, expectedVersion + 1, ExecutorLaunchOptionsService.isQoderFamily(
-                ExecutorLaunchOptionsService.resolveProvider(kindToPersist != null ? kindToPersist : executor.getClientKind())));
+        return toVo(stored, expectedVersion + 1, clientKind);
     }
 
     public LaunchConfig previewConfig(long id, long tenantId, UpdateExecutorLaunchConfigRequest request) {
@@ -108,11 +106,19 @@ public class ExecutorLaunchConfigService {
         LaunchConfig stored = resolve(tenantId, clientKind,
                 req.getMemoryMode(), req.getModel(),
                 req.getReasoningEffort(), req.getContextWindow(), true);
+        if (BundledExecutorRuntime.supports(executor.getClientKind())) {
+            if (req.getModel() == null) stored.model = previous.model;
+            if (req.getReasoningEffort() == null) stored.reasoningEffort = previous.reasoningEffort;
+        }
         stored.maxConcurrentDispatches = resolveMaxConcurrentDispatches(req.getMaxConcurrentDispatches() != null
                 ? req.getMaxConcurrentDispatches() : previous.maxConcurrentDispatches);
         stored.modelUpgradePolicy = req.getModelUpgradePolicy() == null
                 ? previous.modelUpgradePolicy : validatePolicy(tenantId, req.getModelUpgradePolicy(),
                         clientKind);
+        if (BundledExecutorRuntime.supports(clientKind) && isNotBlank(req.getRuntimeVersion())) {
+            throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.bundled_version_managed", null,
+                    "此执行器使用平台内置运行时，无法固定 npm 版本");
+        }
         stored.runtimeVersion = req.getRuntimeVersion() == null ? previous.runtimeVersion : runtimeVersion(req.getRuntimeVersion());
         stored.runtimeVersionPinned = req.getRuntimeVersion() == null ? previous.runtimeVersionPinned
                 : stored.runtimeVersion == null ? null : true;
@@ -135,8 +141,7 @@ public class ExecutorLaunchConfigService {
                 executor.getClientKind());
         if (executorDao.updateLaunchConfig(id, tenantId, mergePolicy(executor.getLaunchConfig(), stored.modelUpgradePolicy), request.getVersion(), userId) == 0)
             throw new BizException(ErrorCode.EXECUTOR_LAUNCH_CONFIG_VERSION_CONFLICT);
-        return toVo(stored, request.getVersion() + 1, ExecutorLaunchOptionsService.isQoderFamily(
-                ExecutorLaunchOptionsService.resolveProvider(executor.getClientKind())));
+        return toVo(stored, request.getVersion() + 1, executor.getClientKind());
     }
 
     private String mergePolicy(String json, ModelUpgradePolicy policy) {
@@ -216,8 +221,10 @@ public class ExecutorLaunchConfigService {
             throw incomplete();
         }
         if (!ExecutorLaunchOptionsService.isQoderFamily(provider)) {
-            stored.model = null;
-            stored.reasoningEffort = null;
+            if (!BundledExecutorRuntime.supports(executor.getClientKind())) {
+                stored.model = null;
+                stored.reasoningEffort = null;
+            }
             stored.contextWindow = null;
             return stored;
         }
@@ -250,6 +257,23 @@ public class ExecutorLaunchConfigService {
         LaunchConfig config = new LaunchConfig();
         config.memoryMode = options.resolveMemoryMode(memoryMode);
         if (!ExecutorLaunchOptionsService.isQoderFamily(provider)) {
+            if (BundledExecutorRuntime.supports(clientKind)) {
+                config.model = isNotBlank(model) ? model.trim() : null;
+                if (config.model != null && !BundledExecutorRuntime.validModel(provider, config.model)) {
+                    throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.bundled_model_invalid",
+                            new Object[]{provider}, "此客户端的模型 ID 格式不合法");
+                }
+                config.reasoningEffort = launchText(reasoningEffort, 16);
+                if (config.reasoningEffort != null
+                        && !BundledExecutorRuntime.reasoningEfforts(provider).contains(config.reasoningEffort)) {
+                    throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.effort_unsupported",
+                            new Object[]{provider}, "推理力度不适用于此客户端");
+                }
+                if (isNotBlank(contextWindow)) {
+                    throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.context_unsupported",
+                            new Object[]{provider}, "此客户端不接受 AutoWonder 上下文窗口参数");
+                }
+            }
             return config;
         }
         String requested = model == null ? null : model.trim();
@@ -303,11 +327,16 @@ public class ExecutorLaunchConfigService {
         }
     }
 
-    private static ExecutorLaunchConfigVO toVo(LaunchConfig config, int version, boolean qoder) {
+    private static ExecutorLaunchConfigVO toVo(LaunchConfig config, int version, String clientKind) {
+        String provider = ExecutorLaunchOptionsService.resolveProvider(clientKind);
+        boolean qoderFamily = ExecutorLaunchOptionsService.isQoderFamily(provider);
+        boolean bundled = BundledExecutorRuntime.supports(clientKind);
         ExecutorLaunchConfigVO vo = new ExecutorLaunchConfigVO();
-        vo.setModel(qoder ? config.model : null);
-        vo.setReasoningEffort(qoder ? config.reasoningEffort : null);
-        vo.setContextWindow(qoder ? config.contextWindow : null);
+        vo.setModel(qoderFamily || bundled ? config.model : null);
+        vo.setReasoningEffort(qoderFamily || (bundled && config.reasoningEffort != null
+                && BundledExecutorRuntime.reasoningEfforts(provider).contains(config.reasoningEffort))
+                ? config.reasoningEffort : null);
+        vo.setContextWindow(qoderFamily ? config.contextWindow : null);
         vo.setMemoryMode(config.memoryMode);
         vo.setMaxConcurrentDispatches(config.maxConcurrentDispatches);
         vo.setModelUpgradePolicy(config.modelUpgradePolicy);
@@ -331,7 +360,7 @@ public class ExecutorLaunchConfigService {
     }
 
     private static String launchText(String value, int maxLength) {
-        if (value.isBlank()) return null;
+        if (!isNotBlank(value)) return null;
         if (value.length() > maxLength || value.chars().anyMatch(Character::isISOControl)) {
             throw BizException.keyed(ErrorCode.PARAM_INVALID, "executor.command.parameter_invalid", null,
                     "启动参数过长或包含控制字符");
@@ -357,7 +386,9 @@ public class ExecutorLaunchConfigService {
         for (ModelUpgradePolicy.Level level : policy.getLevels()) {
             if (level == null || level.getEntryCount() == null || level.getEntryCount() <= previous
                     || level.getModel() == null || level.getModel().isBlank()
-                    || level.getModel().length() > 200 || !level.getModel().matches("[A-Za-z0-9_.:/+-]+")
+                    || level.getModel().length() > 200 || !(BundledExecutorRuntime.supports(clientKind)
+                            ? BundledExecutorRuntime.validModel(provider, level.getModel())
+                            : level.getModel().matches("[A-Za-z0-9_.:/+-]+"))
                     || !models.add(level.getModel())) throw invalidPolicy();
             if (policy.isEnabled() && ExecutorLaunchOptionsService.isQoderFamily(provider)
                     && !modelIds(tenantId, provider).contains(level.getModel()))

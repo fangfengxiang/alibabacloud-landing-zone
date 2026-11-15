@@ -166,10 +166,10 @@ class ExecutorLaunchCommandServiceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"CLAUDE_CODE, claude", "CODEX_CLI, codex"})
+    @CsvSource({"CLAUDE_CODE, claude", "CODEX_CLI, codex", "OPENCODE_CLI, opencode"})
     void localCliUsesBundledRuntimeAndOmitsQoderFlags(String clientKind, String provider) {
-        ExecutorLaunchCommandVO vo = build("awexec_plain", clientKind, "provider-local", "qmodel_latest",
-                "medium", "260000", "posix", false, null);
+        ExecutorLaunchCommandVO vo = build("awexec_plain", clientKind, "provider-local", null,
+                null, null, "posix", false, null);
 
         assertEquals(provider, vo.getProvider());
         assertTrue(vo.getRuntimeVersion().matches("community-[0-9a-f]{12}"));
@@ -189,10 +189,12 @@ class ExecutorLaunchCommandServiceTest {
         assertEquals(2, parsed.getMaxConcurrentDispatches());
         assertNull(parsed.getRuntimeVersion());
         assertTrue(parsed.getDebug());
+        var withModel = ExecutorLaunchCommandParser.parse(command + " --model test/model", command, 9);
+        assertEquals("test/model", withModel.getModel());
         assertThrows(BizException.class, () -> ExecutorLaunchCommandParser.parse(
                 command.replace("data:text/javascript", "data:text/plain"), command, 9));
         assertThrows(BizException.class, () -> ExecutorLaunchCommandParser.parse(
-                command + " --model qmodel_latest", command, 9));
+                command + " --context-window 260000", command, 9));
     }
 
     @Test

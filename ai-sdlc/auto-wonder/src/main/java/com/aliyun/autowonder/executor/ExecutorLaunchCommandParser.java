@@ -17,7 +17,7 @@ final class ExecutorLaunchCommandParser {
             "max-tasks", "model", "reasoning-effort", "context-window", "memory-mode", "workspace-root");
     private static final Set<String> BOOLEAN_FLAGS = Set.of("debug", "token-aware-enable");
     private static final Set<String> BUNDLED_UNSUPPORTED_FLAGS =
-            Set.of("model", "reasoning-effort", "context-window", "token-aware-enable");
+            Set.of("context-window", "token-aware-enable");
 
     private ExecutorLaunchCommandParser() { }
 
@@ -34,6 +34,7 @@ final class ExecutorLaunchCommandParser {
             }
         }
         for (String key : List.of("memory-mode", "max-tasks", "model", "reasoning-effort", "context-window")) {
+            if (bundled && ("model".equals(key) || "reasoning-effort".equals(key))) continue;
             if (expected.containsKey(key) && !flags.containsKey(key)) throw invalid();
         }
         var result = new UpdateExecutorLaunchConfigRequest();
@@ -49,8 +50,8 @@ final class ExecutorLaunchCommandParser {
         result.setWorkspaceRoot(flags.getOrDefault("workspace-root", ""));
         result.setDaemonName(flags.getOrDefault("name", ""));
         result.setDebug(flags.containsKey("debug"));
-        result.setModel(flags.get("model"));
-        result.setReasoningEffort(flags.get("reasoning-effort"));
+        result.setModel(bundled ? flags.getOrDefault("model", "") : flags.get("model"));
+        result.setReasoningEffort(bundled ? flags.getOrDefault("reasoning-effort", "") : flags.get("reasoning-effort"));
         result.setContextWindow(flags.get("context-window"));
         result.setMemoryMode(flags.get("memory-mode"));
         try {

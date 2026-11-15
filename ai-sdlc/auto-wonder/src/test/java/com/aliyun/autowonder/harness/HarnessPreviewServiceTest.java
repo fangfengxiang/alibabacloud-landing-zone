@@ -274,7 +274,7 @@ class HarnessPreviewServiceTest {
                 () -> preview(
                         Map.of("onboardingId", 999999L, "expectedVersion", 0, "clientKind", "QODER_CLI")))
                 .getCode());
-        for (String unsupported : List.of("BAD", "CODEX_CLI", " claude_code ")) {
+        for (String unsupported : List.of("BAD", "CODEX_CLI", "OPENCODE_CLI", " claude_code ")) {
             BizException failure = assertThrows(BizException.class, () -> preview(
                     Map.of("onboardingId", onboarding.id(), "expectedVersion", onboarding.version(),
                             "clientKind", unsupported)));

@@ -4,15 +4,15 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { prepareCapsule, uploadArtifacts } from './capsule.mjs';
-import { runEngine } from './engine.mjs';
+import { runEngine, validateModelOptions } from './engine.mjs';
 
 const HEARTBEAT_MS = 5000;
 const RECONNECT_MS = 3000;
 const CONNECT_TIMEOUT_MS = 15000;
 const TASK_TIMEOUT_MS = 15 * 60 * 1000;
 const FRAME_LIMIT = 1024 * 1024;
-const PROTOCOL_FEATURES = ['TASK_PACKAGE_SIGNATURE_V1'];
-const providers = new Set(['claude', 'codex']);
+const PROTOCOL_FEATURES = ['TASK_PACKAGE_SIGNATURE_V1', 'TASK_MODEL_SELECTION_V1'];
+const providers = new Set(['claude', 'codex', 'opencode']);
 const memoryModes = new Set(['platform', 'provider-local', 'none']);
 const id = (value) => Number.isSafeInteger(value) && value > 0;
 
@@ -22,6 +22,7 @@ export function parseLaunch(argv) {
     provider: { type: 'string' }, 'memory-mode': { type: 'string', default: 'platform' },
     'max-tasks': { type: 'string', default: '5' }, 'workspace-root': { type: 'string' },
     name: { type: 'string' }, debug: { type: 'boolean' },
+    model: { type: 'string' }, 'reasoning-effort': { type: 'string' },
   } });
   const url = new URL(values['ws-url']);
   const executorId = Number(values['executor-id']);
@@ -33,15 +34,21 @@ export function parseLaunch(argv) {
       || !Number.isInteger(capacity) || capacity < 1 || capacity > 10) {
     throw new Error('INVALID_EXECUTOR_LAUNCH');
   }
+  validateModelOptions(values.provider, values.model, values['reasoning-effort']);
   const platform = new URL(url);
   platform.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
   url.searchParams.set('executorId', String(executorId));
   url.searchParams.set('token', token);
   url.searchParams.set('maxConcurrentDispatches', String(capacity));
   if (values.name) url.searchParams.set('hostname', values.name);
+  const configuredRoot = values['workspace-root'] || process.env.AUTOWONDER_WORKSPACE_ROOT;
+  const workspaceRoot = configuredRoot === '~' ? homedir()
+    : configuredRoot?.startsWith('~/') ? join(homedir(), configuredRoot.slice(2))
+    : configuredRoot || join(homedir(), '.autowonder', 'local-executor', String(executorId));
   return { url, executorId, token, capacity, platformOrigin: platform.origin,
     provider: values.provider, memoryMode: values['memory-mode'], debug: values.debug,
-    root: resolve(values['workspace-root'] || process.env.AUTOWONDER_WORKSPACE_ROOT || join(homedir(), '.autowonder', 'local-executor', String(executorId))) };
+    model: values.model, reasoningEffort: values['reasoning-effort'],
+    root: resolve(workspaceRoot) };
 }
 
 function diagnostic(error) {
@@ -77,10 +84,11 @@ export async function main(argv, version) {
       directory = await mkdtemp(join(launch.root, `task-${dispatchId}-`));
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(TASK_TIMEOUT_MS)]);
       if (frame.resumeMode && frame.resumeMode !== 'none') throw new Error('EXECUTOR_RESUME_UNSUPPORTED');
-      const capsule = await prepareCapsule(frame, directory, signal);
+      const capsule = await prepareCapsule(frame, directory, signal, launch.memoryMode);
       send({ type: 'TASK_PROGRESS', dispatchId, eventType: 'step.started', resultSummary: 'CLI execution started' });
       const summary = await runEngine(launch.provider, capsule, directory,
-        { ...frame, memoryMode: launch.memoryMode }, signal);
+        { memoryMode: launch.memoryMode, model: frame.modelSelection?.model ?? launch.model,
+          reasoningEffort: launch.reasoningEffort }, signal);
       await uploadArtifacts(frame, directory, launch.platformOrigin, launch.token, signal);
       result = { type: 'TASK_RESULT', dispatchId, success: true, resultSummary: summary };
     } catch (error) {

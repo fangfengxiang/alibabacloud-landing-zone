@@ -92,6 +92,7 @@ const MOCK_PROVIDERS: Record<string, string> = {
   QODER_CLI: 'qoder',
   CLAUDE_CODE: 'claude',
   CODEX_CLI: 'codex',
+  OPENCODE_CLI: 'opencode',
   CURSOR_CLI: 'cursor',
 };
 
@@ -111,6 +112,10 @@ function mockProviderFor(clientKind: string | null): string {
 
 function isQoderProvider(provider: string): boolean {
   return provider === 'qoder' || provider === 'qodercn';
+}
+
+function isBundledProvider(provider: string): boolean {
+  return provider === 'claude' || provider === 'codex' || provider === 'opencode';
 }
 
 type LaunchCommandBody = {
@@ -140,6 +145,7 @@ function buildMockLaunchCommand(id: number, stored: StoredLaunchConfig, fixture:
   os: string, debug: boolean, shell: string | null): Record<string, unknown> {
   const provider = mockProviderFor(fixture.clientKind);
   const isQoder = isQoderProvider(provider);
+  const bundled = isBundledProvider(provider);
   const runtimeVersion = stored.runtimeVersionPinned && stored.runtimeVersion ? stored.runtimeVersion : MOCK_RUNTIME_VERSION;
   const [major, minor, patch] = runtimeVersion.split('.').map(Number);
   const packageName = major > 0 || minor > 3 || (minor === 3 && patch >= 33)
@@ -157,6 +163,9 @@ function buildMockLaunchCommand(id: number, stored: StoredLaunchConfig, fixture:
       '--reasoning-effort', stored.reasoningEffort as string,
       '--context-window', stored.contextWindow as string,
       '--token-aware-enable');
+  } else if (bundled) {
+    if (stored.model) argv.push('--model', stored.model);
+    if (stored.reasoningEffort) argv.push('--reasoning-effort', stored.reasoningEffort);
   }
   if (stored.workspaceRoot) argv.push('--workspace-root', `'${stored.workspaceRoot.replace(/'/g, "'\\''")}'`);
   if (stored.daemonName) argv.push('--name', `'${stored.daemonName.replace(/'/g, "'\\''")}'`);
@@ -169,8 +178,8 @@ function buildMockLaunchCommand(id: number, stored: StoredLaunchConfig, fixture:
     clientKind: fixture.clientKind,
     provider,
     memoryMode: stored.memoryMode,
-    model: isQoder ? stored.model : null,
-    reasoningEffort: isQoder ? stored.reasoningEffort : null,
+    model: isQoder || bundled ? stored.model || null : null,
+    reasoningEffort: isQoder || bundled ? stored.reasoningEffort || null : null,
     contextWindow: isQoder ? stored.contextWindow : null,
     wsUrl: MOCK_WS_URL,
     runtimeVersion,
@@ -387,10 +396,11 @@ export const handlers = [
         traceId: null,
       });
     }
+    const bundled = isBundledProvider(mockProviderFor(clientKind ?? fixture?.clientKind ?? 'QODER_CLI'));
     const next: StoredLaunchConfig = {
       ...current,
-      model: body.model ?? null,
-      reasoningEffort: body.reasoningEffort ?? null,
+      model: bundled && body.model == null ? current.model : body.model || null,
+      reasoningEffort: bundled && body.reasoningEffort == null ? current.reasoningEffort : body.reasoningEffort || null,
       contextWindow: body.contextWindow ?? null,
       memoryMode: body.memoryMode ?? null,
       version: current.version + 1,
